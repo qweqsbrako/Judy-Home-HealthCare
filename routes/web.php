@@ -209,6 +209,11 @@ Route::middleware('auth:web')->group(function () {
     | Time Tracking Routes
     |--------------------------------------------------------------------------
     */
+
+        
+    // Export
+    Route::get('/time-tracking/export', [TimeTrackingController::class, 'export']);
+
     Route::get('/time-tracking/current', [TimeTrackingController::class, 'getCurrentSession']);
     Route::get('/time-tracking/summary/today', [TimeTrackingController::class, 'getTodaysSummary']);
     Route::get('/time-tracking/summary/weekly', [TimeTrackingController::class, 'getWeeklySummary']);
@@ -231,9 +236,7 @@ Route::middleware('auth:web')->group(function () {
     
     // Break management
     Route::post('/time-tracking/{timeTracking}/add-break', [TimeTrackingController::class, 'addBreak']);
-    
-    // Export
-    Route::get('/time-tracking/export', [TimeTrackingController::class, 'export']);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -241,7 +244,6 @@ Route::middleware('auth:web')->group(function () {
     |--------------------------------------------------------------------------
     */
     // Standard CRUD routes
-    Route::apiResource('progress-notes', ProgressNoteController::class);
     
     Route::prefix('progress-notes')->group(function () {
         Route::get('export', [ProgressNoteController::class, 'export'])
@@ -265,6 +267,8 @@ Route::middleware('auth:web')->group(function () {
         Route::get('progress-notes', [ProgressNoteController::class, 'getNurseNotes'])
             ->name('nurses.progress-notes');
     });
+
+    Route::apiResource('progress-notes', ProgressNoteController::class);
 
     /*
     |--------------------------------------------------------------------------

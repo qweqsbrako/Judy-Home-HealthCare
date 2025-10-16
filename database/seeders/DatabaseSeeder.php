@@ -120,6 +120,8 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             UserSeeder::class,
             ScheduleSeeder::class,
+            ProgressNoteSeeder::class,
+            MedicalAssessmentSeeder::class,
         ]);
     }
 }

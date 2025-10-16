@@ -515,6 +515,47 @@
           </div>
 
           <div class="modal-body">
+            <!-- Active Session Live View -->
+            <div v-if="selectedSession.status === 'active' && selectedSession.start_time" class="active-session-view">
+              <div class="session-header">
+                <div class="session-info">
+                  <h3 class="session-title">Active Session</h3>
+                  <p class="session-subtitle">{{ formatSessionType(selectedSession.session_type) }}</p>
+                </div>
+                <div class="session-status">
+                  <span :class="'modern-badge ' + getStatusBadgeColor(selectedSession.status)">
+                    {{ formatStatus(selectedSession.status) }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="session-content-modal">
+                <div class="timer-display-modal">
+                  <div class="timer-time-modal">{{ viewModalSessionTime }}</div>
+                  <div class="timer-label-modal">Active Session</div>
+                </div>
+
+                <div class="session-details-layout-modal">
+                  <div class="detail-item-modal" v-if="selectedSession.patient">
+                    <label>Patient:</label>
+                    <span>{{ selectedSession.patient.first_name }} {{ selectedSession.patient.last_name }}</span>
+                  </div>
+                  <div class="detail-item-modal" v-if="selectedSession.schedule">
+                    <label>Schedule:</label>
+                    <span>{{ selectedSession.schedule.care_plan?.title || 'No Care Plan' }}</span>
+                  </div>
+                  <div class="detail-item-modal" v-if="selectedSession.start_time">
+                    <label>Started:</label>
+                    <span>{{ formatTime(selectedSession.start_time) }}</span>
+                  </div>
+                  <div class="detail-item-modal" v-if="selectedSession.clock_in_location">
+                    <label>Location:</label>
+                    <span>{{ selectedSession.clock_in_location }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="user-view-grid">
               <div class="user-profile-section">
                 <img
@@ -760,7 +801,9 @@ const loading = ref(true)
 const isProcessing = ref(false)
 const isLoadingData = ref(false)
 const currentSessionTime = ref('00:00:00')
+const viewModalSessionTime = ref('00:00:00')
 const timerInterval = ref(null)
+const viewModalTimerInterval = ref(null)
 
 const userRole = ref(getCurrentUserRole())
 const currentUserId = ref(getCurrentUserId())
@@ -988,6 +1031,36 @@ const stopTimer = () => {
   }
 }
 
+const startViewModalTimer = () => {
+  if (viewModalTimerInterval.value) {
+    clearInterval(viewModalTimerInterval.value)
+  }
+
+  viewModalTimerInterval.value = setInterval(() => {
+    if (selectedSession.value && selectedSession.value.start_time && selectedSession.value.status === 'active') {
+      const startTime = new Date(selectedSession.value.start_time)
+      const now = new Date()
+      const diff = now - startTime
+      
+      const pauseDuration = (selectedSession.value.total_pause_duration_minutes || 0) * 60 * 1000
+      const activeDiff = Math.max(0, diff - pauseDuration)
+      
+      const hours = Math.floor(activeDiff / (1000 * 60 * 60))
+      const minutes = Math.floor((activeDiff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((activeDiff % (1000 * 60)) / 1000)
+      
+      viewModalSessionTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    }
+  }, 1000)
+}
+
+const stopViewModalTimer = () => {
+  if (viewModalTimerInterval.value) {
+    clearInterval(viewModalTimerInterval.value)
+    viewModalTimerInterval.value = null
+  }
+}
+
 // Form event handlers
 const onNurseChange = (nurseId) => {
   sessionForm.value.schedule_id = ''
@@ -1071,10 +1144,16 @@ const viewSession = (session) => {
   selectedSession.value = session
   showViewSessionModal.value = true
   activeDropdown.value = null
+  
+  // Start timer if session is active
+  if (session.status === 'active' && session.start_time) {
+    startViewModalTimer()
+  }
 }
 
 const closeViewSessionModal = () => {
   showViewSessionModal.value = false
+  stopViewModalTimer()
   selectedSession.value = null
 }
 
@@ -1379,6 +1458,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopTimer()
+  stopViewModalTimer()
   document.removeEventListener('click', handleClickOutside)
 })
 
@@ -1774,7 +1854,6 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   font-weight: 500;
 }
 
-
 /* Table Styles */
 .time-tracking-table-container {
   background: white;
@@ -1783,7 +1862,6 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   border: 1px solid #f1f5f9;
   overflow: visible;
 }
-
 
 .modern-table {
   width: 100%;
@@ -2414,6 +2492,71 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   height: 14px;
 }
 
+/* Active Session View in Modal */
+.active-session-view {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 32px;
+  color: white;
+  margin-bottom: 32px;
+  box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+}
+
+.session-content-modal {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.timer-display-modal {
+  text-align: center;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.timer-time-modal {
+  font-size: 48px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.timer-label-modal {
+  font-size: 16px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.session-details-layout-modal {
+  display: grid;
+  gap: 16px;
+}
+
+.detail-item-modal {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.detail-item-modal:last-child {
+  border-bottom: none;
+}
+
+.detail-item-modal label {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.detail-item-modal span {
+  font-weight: 500;
+}
+
 /* View Grid */
 .user-view-grid {
   display: grid;
@@ -2540,6 +2683,11 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   .details-grid-view {
     grid-template-columns: 1fr;
   }
+  
+  .session-content-modal {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2561,7 +2709,16 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
     gap: 24px;
   }
   
+  .session-content-modal {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
   .timer-time {
+    font-size: 36px;
+  }
+  
+  .timer-time-modal {
     font-size: 36px;
   }
   

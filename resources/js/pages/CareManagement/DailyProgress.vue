@@ -1,823 +1,836 @@
 <template>
   <MainLayout>
     <div class="progress-notes-page">
-      <div class="max-w-7xl mx-auto px-4 py-8">
-        <!-- Page Header -->
-        <div class="page-header">
-          <div class="page-header-content">
-            <h1>Daily Progress Notes</h1>
-            <p>Record and manage daily nursing progress notes for patient care</p>
-          </div>
-          <div class="page-header-actions">
-            <button
-              @click="exportNotes"
-              class="btn btn-secondary"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export
-            </button>
-            <button
-              @click="openCreateModal"
-              class="btn btn-primary"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Progress Note
-            </button>
-          </div>
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-header-content">
+          <h1>Daily Progress Notes</h1>
+          <p>Record and manage daily nursing progress notes for patient care</p>
         </div>
-
-        <!-- Filters and Search -->
-        <div class="filters-section">
-          <div class="filters-content">
-            <div class="search-wrapper">
-              <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by patient name, nurse, or notes..."
-                v-model="searchQuery"
-                class="search-input"
-              />
-            </div>
-            <div class="filters-group">
-              <select
-                v-model="patientFilter"
-                class="filter-select"
-              >
-                <option value="all">All Patients</option>
-                <option v-for="patient in patients" :key="patient.id" :value="patient.id">
-                  {{ patient.first_name }} {{ patient.last_name }}
-                </option>
-              </select>
-              <select
-                v-model="nurseFilter"
-                class="filter-select"
-              >
-                <option value="all">All Nurses</option>
-                <option v-for="nurse in nurses" :key="nurse.id" :value="nurse.id">
-                  {{ nurse.first_name }} {{ nurse.last_name }}
-                </option>
-              </select>
-              <input
-                type="date"
-                v-model="dateFilter"
-                class="filter-select"
-                style="width: auto;"
-              />
-              <select
-                v-model="dateType"
-                class="filter-select"
-                style="width: auto;"
-              >
-                <option value="visit">Visit Date</option>
-                <option value="created">Created Date</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- Loading State -->
-        <div v-if="loading" class="loading-state">
-          <div class="loading-spinner"></div>
-          <p class="loading-text">Loading progress notes...</p>
-        </div>
-
-        <!-- Progress Notes Table -->
-        <div v-else class="progress-notes-table-container">
-          <div class="overflow-x-auto">
-            <table class="progress-notes-table">
-              <thead>
-                <tr>
-                  <th>Patient</th>
-                  <th>Nurse/Caregiver</th>
-                  <th>Visit Date & Time</th>
-                  <th>General Condition</th>
-                  <th>Pain Level</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="note in filteredNotes" :key="note.id">
-                  <td>
-                    <div class="patient-info">
-                      <div class="patient-avatar">
-                        <img :src="note.patient_avatar_url" :alt="note.patient_name" />
-                      </div>
-                      <div class="patient-details">
-                        <div class="patient-name">{{ note.patient_name }}</div>
-                        <div class="patient-id">ID: {{ note.patient_id }}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="nurse-info">
-                      <div class="nurse-name">{{ note.nurse_name }}</div>
-                      <div class="nurse-license">{{ note.nurse_license || 'N/A' }}</div>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="visit-info">
-                      <div class="visit-date">{{ formatDate(note.visit_date) }}</div>
-                      <div class="visit-time">{{ note.visit_time }}</div>
-                    </div>
-                  </td>
-                  <td>
-                    <span :class="'badge ' + getConditionBadgeColor(note.general_condition)">
-                      {{ capitalizeFirst(note.general_condition) }}
-                    </span>
-                  </td>
-                  <td>
-                    <div class="pain-level">
-                      <span class="pain-score">{{ note.pain_level }}/10</span>
-                      <div class="pain-indicator">
-                        <div 
-                          class="pain-bar" 
-                          :style="{ width: (note.pain_level * 10) + '%', backgroundColor: getPainColor(note.pain_level) }"
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="action-dropdown">
-                      <button
-                        @click="toggleDropdown(note.id)"
-                        class="btn btn-secondary btn-sm"
-                        style="min-width: auto; padding: 0.5rem;"
-                      >
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                        </svg>
-                      </button>
-                      <div v-show="activeDropdown === note.id" class="dropdown-menu">
-                        <button
-                          @click="openViewModal(note)"
-                          class="dropdown-item"
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                          View Details
-                        </button>
-                        <button
-                          @click="openEditModal(note)"
-                          class="dropdown-item"
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          Edit Note
-                        </button>
-                        <button
-                          @click="duplicateNote(note)"
-                          class="dropdown-item"
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          Duplicate
-                        </button>
-                        <div class="dropdown-divider"></div>
-                        <button
-                          @click="openDeleteModal(note)"
-                          class="dropdown-item dropdown-item-danger"
-                        >
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete Note
-                        </button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          
-          <div v-if="filteredNotes.length === 0" class="empty-state">
-            <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        <div class="page-header-actions">
+          <button @click="exportNotes" class="btn-modern btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3>No progress notes found</h3>
-            <p>
-              {{ (searchQuery || patientFilter !== 'all' || nurseFilter !== 'all' || dateFilter) 
-                ? 'Try adjusting your search or filters.' 
-                : 'Get started by adding a new progress note.' }}
-            </p>
+            Export
+          </button>
+          <button @click="openCreateModal" class="btn-modern btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            Add Progress Note
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Total Notes</div>
+            <div class="stat-value">{{ totalNotes }}</div>
+            <div class="stat-change positive">All time</div>
           </div>
         </div>
 
-        <!-- Create/Edit Progress Note Modal -->
-        <div v-if="showNoteModal" class="modal-overlay">
-          <div class="modal modal-xl">
-            <div class="modal-header">
-              <h2 class="modal-title">
-                <svg class="modal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {{ isEditing ? 'Edit Progress Note' : 'New Progress Note' }}
-              </h2>
-              <button @click="closeNoteModal" class="modal-close">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <form @submit.prevent="saveNote" id="noteForm">
-              <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-                <div class="form-grid">
-                  <!-- Basic Information -->
-                  <div class="form-section-header">
-                    <h3 class="form-section-title">📘 Visit Information</h3>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label>Patient *</label>
-                    <SearchableSelect
-                      v-model="noteForm.patient_id"
-                      :options="patientOptions"
-                      placeholder="Select a patient..."
-                      required
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Nurse/Caregiver *</label>
-                    <SearchableSelect
-                      v-model="noteForm.nurse_id"
-                      :options="nurseOptions"
-                      placeholder="Select a nurse..."
-                      required
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Visit Date *</label>
-                    <input
-                      type="date"
-                      v-model="noteForm.visit_date"
-                      required
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Visit Time *</label>
-                    <input
-                      type="time"
-                      v-model="noteForm.visit_time"
-                      required
-                    />
-                  </div>
-
-                  <!-- Vital Signs -->
-                  <div class="form-section-header">
-                    <h3 class="form-section-title">🩺 Vital Signs</h3>
-                  </div>
-
-                  <div class="form-group">
-                    <label>Temperature (°C)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      v-model="noteForm.vitals.temperature"
-                      placeholder="36.5"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Pulse (bpm)</label>
-                    <input
-                      type="number"
-                      v-model="noteForm.vitals.pulse"
-                      placeholder="72"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Respiration (/min)</label>
-                    <input
-                      type="number"
-                      v-model="noteForm.vitals.respiration"
-                      placeholder="16"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Blood Pressure (mmHg)</label>
-                    <input
-                      type="text"
-                      v-model="noteForm.vitals.blood_pressure"
-                      placeholder="120/80"
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>SpO₂ (%)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      v-model="noteForm.vitals.spo2"
-                      placeholder="98"
-                    />
-                  </div>
-
-                  <!-- Interventions Provided -->
-                  <div class="form-section-header">
-                    <h3 class="form-section-title">💊 Interventions Provided</h3>
-                  </div>
-
-                  <!-- Fixed Intervention Sections with proper styling -->
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.medication_administered" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Medication Administered</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.medication_administered"
-                      type="text"
-                      v-model="noteForm.interventions.medication_details"
-                      placeholder="List medications administered..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.wound_care" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Wound Care</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.wound_care"
-                      type="text"
-                      v-model="noteForm.interventions.wound_care_details"
-                      placeholder="Describe wound care provided..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.physiotherapy" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Physiotherapy/Exercise</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.physiotherapy"
-                      type="text"
-                      v-model="noteForm.interventions.physiotherapy_details"
-                      placeholder="Describe exercises/physiotherapy..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.nutrition_support" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Nutrition/Feeding Support</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.nutrition_support"
-                      type="text"
-                      v-model="noteForm.interventions.nutrition_details"
-                      placeholder="Describe nutrition support provided..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.hygiene_care" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Hygiene/Personal Care</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.hygiene_care"
-                      type="text"
-                      v-model="noteForm.interventions.hygiene_details"
-                      placeholder="Describe personal care provided..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.counseling_education" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Counseling/Education</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.counseling_education"
-                      type="text"
-                      v-model="noteForm.interventions.counseling_details"
-                      placeholder="Describe counseling/education provided..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label class="checkbox-label">
-                      <input type="checkbox" v-model="noteForm.interventions.other" />
-                      <span class="checkmark"></span>
-                      <span class="checkbox-text">Other Interventions</span>
-                    </label>
-                    <input
-                      v-show="noteForm.interventions.other"
-                      type="text"
-                      v-model="noteForm.interventions.other_details"
-                      placeholder="Specify other interventions..."
-                      class="intervention-input"
-                    />
-                  </div>
-
-                  <!-- Observations/Findings -->
-                  <div class="form-section-header">
-                    <h3 class="form-section-title">👁️ Observations/Findings</h3>
-                  </div>
-
-                  <div class="form-group">
-                    <label>General Condition *</label>
-                    <SearchableSelect
-                      v-model="noteForm.general_condition"
-                      :options="conditionOptions"
-                      placeholder="Select condition..."
-                      required
-                    />
-                  </div>
-
-                  <div class="form-group">
-                    <label>Pain Level (0-10) *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      v-model="noteForm.pain_level"
-                      required
-                    />
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label>Wound Status (if any)</label>
-                    <textarea
-                      v-model="noteForm.wound_status"
-                      rows="3"
-                      placeholder="Describe wound status, healing progress, etc..."
-                    ></textarea>
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label>Other Significant Observations</label>
-                    <textarea
-                      v-model="noteForm.other_observations"
-                      rows="3"
-                      placeholder="Note any other significant observations..."
-                    ></textarea>
-                  </div>
-
-                  <!-- Family/Client Communication -->
-                  <div class="form-section-header">
-                    <h3 class="form-section-title">👨‍👩‍👧‍👦 Family/Client Communication</h3>
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label>Education Provided</label>
-                    <textarea
-                      v-model="noteForm.education_provided"
-                      rows="3"
-                      placeholder="Describe education provided to patient/family..."
-                    ></textarea>
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label>Concerns Raised by Family/Client</label>
-                    <textarea
-                      v-model="noteForm.family_concerns"
-                      rows="3"
-                      placeholder="Note any concerns raised by family or client..."
-                    ></textarea>
-                  </div>
-
-                  <!-- Plan/Next Steps -->
-                  <div class="form-section-header">
-                    <h3 class="form-section-title">📋 Plan / Next Steps</h3>
-                  </div>
-
-                  <div class="form-group form-grid-full">
-                    <label>Plan for Next Visit</label>
-                    <textarea
-                      v-model="noteForm.next_steps"
-                      rows="4"
-                      placeholder="Outline plans for the next visit, follow-up care, adjustments needed..."
-                    ></textarea>
-                  </div>
-                </div>
-              </div>
-
-              <div class="modal-actions">
-                <button type="button" @click="closeNoteModal" class="btn btn-secondary">
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  form="noteForm" 
-                  :disabled="isSaving" 
-                  class="btn btn-primary"
-                >
-                  <div v-if="isSaving" class="spinner spinner-sm"></div>
-                  {{ isEditing ? 'Update Note' : 'Save Note' }}
-                </button>
-              </div>
-            </form>
+        <div class="stat-card">
+          <div class="stat-icon green">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Unique Patients</div>
+            <div class="stat-value">{{ uniquePatients }}</div>
+            <div class="stat-change positive">Served</div>
           </div>
         </div>
 
-        <!-- View Progress Note Modal -->
-        <div v-if="showViewModal && currentNote" class="modal-overlay">
-          <div class="modal modal-xl">
-            <div class="modal-header">
-              <h2 class="modal-title">
-                <svg class="modal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Daily Progress Note - {{ currentNote.patient_name }}
-              </h2>
-              <button @click="closeViewModal" class="modal-close">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+              <path d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Avg Pain Level</div>
+            <div class="stat-value">{{ avgPainLevel }}/10</div>
+            <div class="stat-change neutral">Current average</div>
+          </div>
+        </div>
 
-            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
-              <div class="progress-note-view">
-                <!-- Header Information -->
-                <div class="note-header-card">
-                  <div class="header-info">
-                    <div class="patient-nurse-info">
-                      <div class="info-item">
-                        <label>Patient:</label>
-                        <span>{{ currentNote.patient_name }}</span>
-                      </div>
-                      <div class="info-item">
-                        <label>Nurse/Caregiver:</label>
-                        <span>{{ currentNote.nurse_name }}</span>
-                      </div>
-                      <div class="info-item">
-                        <label>Visit Date:</label>
-                        <span>{{ formatDate(currentNote.visit_date) }}</span>
-                      </div>
-                      <div class="info-item">
-                        <label>Visit Time:</label>
-                        <span>{{ currentNote.visit_time }}</span>
-                      </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Abnormal Vitals</div>
+            <div class="stat-value">{{ abnormalVitals }}</div>
+            <div class="stat-change neutral">Flagged notes</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters Section -->
+      <div class="filters-section">
+        <div class="search-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by patient, nurse, or observations..."
+            v-model="searchQuery"
+            class="search-input"
+          />
+        </div>
+        <div class="filters-group">
+          <select v-model="patientFilter" class="filter-select">
+            <option value="all">All Patients</option>
+            <option v-for="patient in patients" :key="patient.id" :value="patient.id">
+              {{ patient.first_name }} {{ patient.last_name }}
+            </option>
+          </select>
+          
+          <select v-model="nurseFilter" class="filter-select">
+            <option value="all">All Nurses</option>
+            <option v-for="nurse in nurses" :key="nurse.id" :value="nurse.id">
+              {{ nurse.first_name }} {{ nurse.last_name }}
+            </option>
+          </select>
+          
+          <select v-model="conditionFilter" class="filter-select">
+            <option value="all">All Conditions</option>
+            <option value="improved">Improved</option>
+            <option value="stable">Stable</option>
+            <option value="deteriorating">Deteriorating</option>
+          </select>
+          
+          <input type="date" v-model="dateFilter" class="filter-select" />
+          
+          <select v-model="dateType" class="filter-select">
+            <option value="visit">Visit Date</option>
+            <option value="created">Created Date</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="loading" class="loading-state">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Loading progress notes...</p>
+      </div>
+
+      <!-- Progress Notes Table -->
+      <div v-else-if="!loading" class="progress-notes-table-container">
+        <div v-if="progressNotes.data && progressNotes.data.length > 0" class="table-wrapper">
+          <table class="modern-table">
+            <thead>
+              <tr>
+                <th>Patient</th>
+                <th>Nurse/Caregiver</th>
+                <th>Visit Date & Time</th>
+                <th>General Condition</th>
+                <th>Pain Level</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="note in progressNotes.data" :key="note.id">
+                <td>
+                  <div class="user-cell">
+                    <img :src="note.patient_avatar_url || generateAvatar(note.patient)" class="user-avatar-table" />
+                    <div class="user-details-table">
+                      <div class="user-name-table">{{ note.patient_name }}</div>
+                      <div class="user-id-table">ID: {{ note.patient_id }}</div>
                     </div>
                   </div>
+                </td>
+                
+                <td>
+                  <div class="contact-cell">
+                    <div class="contact-primary">{{ note.nurse_name }}</div>
+                    <div class="contact-secondary">{{ note.nurse_license || 'N/A' }}</div>
+                  </div>
+                </td>
+                
+                <td>
+                  <div class="contact-cell">
+                    <div class="contact-primary">{{ formatDate(note.visit_date) }}</div>
+                    <div class="contact-secondary">{{ note.visit_time }}</div>
+                  </div>
+                </td>
+                
+                <td>
+                  <span :class="'modern-badge ' + getConditionBadgeColor(note.general_condition)">
+                    {{ capitalizeFirst(note.general_condition) }}
+                  </span>
+                </td>
+                
+                <td>
+                  <div class="pain-level">
+                    <span class="pain-score">{{ note.pain_level }}/10</span>
+                    <div class="pain-indicator">
+                      <div 
+                        class="pain-bar" 
+                        :style="{ width: (note.pain_level * 10) + '%', backgroundColor: getPainColor(note.pain_level) }"
+                      ></div>
+                    </div>
+                  </div>
+                </td>
+                
+                <td>
+                  <div class="action-cell">
+                    <button @click="toggleDropdown(note.id)" class="action-btn">
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                      </svg>
+                    </button>
+                    
+                    <div v-show="activeDropdown === note.id" class="modern-dropdown">
+                      <button @click="openViewModal(note)" class="dropdown-item-modern">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        View Details
+                      </button>
+                      
+                      <button @click="openEditModal(note)" class="dropdown-item-modern">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit Note
+                      </button>
+                      
+                      <button @click="duplicateNote(note)" class="dropdown-item-modern">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Duplicate
+                      </button>
+                      
+                      <div class="dropdown-divider"></div>
+                      
+                      <button @click="openDeleteModal(note)" class="dropdown-item-modern danger">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Note
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Pagination -->
+          <div v-if="progressNotes.pagination && progressNotes.pagination.last_page > 1" class="pagination-container">
+            <div class="pagination-info">
+              Showing {{ progressNotes.pagination.from || 0 }} to {{ progressNotes.pagination.to || 0 }} of {{ progressNotes.pagination.total || 0 }} notes
+            </div>
+            <div class="pagination-controls">
+              <button 
+                @click="prevPage" 
+                :disabled="progressNotes.pagination.current_page === 1"
+                class="pagination-btn"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </button>
+              
+              <div class="pagination-pages">
+                <button
+                  v-for="page in getPaginationPages()"
+                  :key="page"
+                  @click="goToPage(page)"
+                  :class="['pagination-page', { active: page === progressNotes.pagination.current_page }]"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              
+              <button 
+                @click="nextPage" 
+                :disabled="progressNotes.pagination.current_page === progressNotes.pagination.last_page"
+                class="pagination-btn"
+              >
+                Next
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3>No progress notes found</h3>
+          <p>
+            {{ (searchQuery || patientFilter !== 'all' || nurseFilter !== 'all' || conditionFilter !== 'all' || dateFilter) 
+              ? 'Try adjusting your search or filters.' 
+              : 'Start your first note to begin tracking patient care.' }}
+          </p>
+          <button @click="openCreateModal" class="btn btn-primary">
+            Add First Note
+          </button>
+        </div>
+      </div>
+
+      <!-- Create/Edit Modal -->
+      <div v-if="showNoteModal" class="modal-overlay" @click.self="closeNoteModal">
+        <div class="modal modal-xl">
+          <div class="modal-header">
+            <h2 class="modal-title">
+              <svg class="modal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {{ isEditing ? 'Edit Progress Note' : 'New Progress Note' }}
+            </h2>
+            <button @click="closeNoteModal" class="modal-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <form @submit.prevent="saveNote">
+            <div class="modal-body">
+              <div class="form-grid">
+                <!-- Visit Information -->
+                <div class="form-section-header">
+                  <h3 class="form-section-title">📘 Visit Information</h3>
+                </div>
+                
+                <div class="form-group">
+                  <label>Patient <span class="required">*</span></label>
+                  <SearchableSelect
+                    v-model="noteForm.patient_id"
+                    :options="patientOptions"
+                    placeholder="Select a patient..."
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Nurse/Caregiver <span class="required">*</span></label>
+                  <SearchableSelect
+                    v-model="noteForm.nurse_id"
+                    :options="nurseOptions"
+                    placeholder="Select a nurse..."
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Visit Date <span class="required">*</span></label>
+                  <input type="date" v-model="noteForm.visit_date" required />
+                </div>
+
+                <div class="form-group">
+                  <label>Visit Time <span class="required">*</span></label>
+                  <input type="time" v-model="noteForm.visit_time" required />
                 </div>
 
                 <!-- Vital Signs -->
-                <div class="note-section">
-                  <h4 class="section-title">🩺 Vital Signs</h4>
-                  <div class="vitals-grid">
-                    <div class="vital-item">
-                      <label>Temperature:</label>
-                      <span>{{ currentNote.vitals?.temperature || 'N/A' }} °C</span>
-                    </div>
-                    <div class="vital-item">
-                      <label>Pulse:</label>
-                      <span>{{ currentNote.vitals?.pulse || 'N/A' }} bpm</span>
-                    </div>
-                    <div class="vital-item">
-                      <label>Respiration:</label>
-                      <span>{{ currentNote.vitals?.respiration || 'N/A' }} /min</span>
-                    </div>
-                    <div class="vital-item">
-                      <label>Blood Pressure:</label>
-                      <span>{{ currentNote.vitals?.blood_pressure || 'N/A' }} mmHg</span>
-                    </div>
-                    <div class="vital-item">
-                      <label>SpO₂:</label>
-                      <span>{{ currentNote.vitals?.spo2 || 'N/A' }} %</span>
-                    </div>
-                  </div>
+                <div class="form-section-header">
+                  <h3 class="form-section-title">🩺 Vital Signs</h3>
+                </div>
+
+                <div class="form-group">
+                  <label>Temperature (°C)</label>
+                  <input type="number" step="0.1" v-model="noteForm.vitals.temperature" placeholder="36.5" />
+                </div>
+
+                <div class="form-group">
+                  <label>Pulse (bpm)</label>
+                  <input type="number" v-model="noteForm.vitals.pulse" placeholder="72" />
+                </div>
+
+                <div class="form-group">
+                  <label>Respiration (/min)</label>
+                  <input type="number" v-model="noteForm.vitals.respiration" placeholder="16" />
+                </div>
+
+                <div class="form-group">
+                  <label>Blood Pressure (mmHg)</label>
+                  <input type="text" v-model="noteForm.vitals.blood_pressure" placeholder="120/80" />
+                </div>
+
+                <div class="form-group">
+                  <label>SpO₂ (%)</label>
+                  <input type="number" min="0" max="100" v-model="noteForm.vitals.spo2" placeholder="98" />
                 </div>
 
                 <!-- Interventions -->
-                <div class="note-section">
-                  <h4 class="section-title">💊 Interventions Provided</h4>
-                  <div class="interventions-list">
-                    <div v-if="currentNote.interventions?.medication_administered" class="intervention-item">
-                      <strong>✓ Medication Administered:</strong>
-                      <span>{{ currentNote.interventions.medication_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="currentNote.interventions?.wound_care" class="intervention-item">
-                      <strong>✓ Wound Care:</strong>
-                      <span>{{ currentNote.interventions.wound_care_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="currentNote.interventions?.physiotherapy" class="intervention-item">
-                      <strong>✓ Physiotherapy/Exercise:</strong>
-                      <span>{{ currentNote.interventions.physiotherapy_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="currentNote.interventions?.nutrition_support" class="intervention-item">
-                      <strong>✓ Nutrition/Feeding Support:</strong>
-                      <span>{{ currentNote.interventions.nutrition_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="currentNote.interventions?.hygiene_care" class="intervention-item">
-                      <strong>✓ Hygiene/Personal Care:</strong>
-                      <span>{{ currentNote.interventions.hygiene_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="currentNote.interventions?.counseling_education" class="intervention-item">
-                      <strong>✓ Counseling/Education:</strong>
-                      <span>{{ currentNote.interventions.counseling_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="currentNote.interventions?.other" class="intervention-item">
-                      <strong>✓ Other:</strong>
-                      <span>{{ currentNote.interventions.other_details || 'Details not provided' }}</span>
-                    </div>
-                    <div v-if="!hasAnyInterventions(currentNote.interventions)" class="no-interventions">
-                      <em>No specific interventions documented.</em>
-                    </div>
-                  </div>
+                <div class="form-section-header">
+                  <h3 class="form-section-title">💊 Interventions Provided</h3>
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.medication_administered" />
+                    <span class="checkbox-text">Medication Administered</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.medication_administered"
+                    type="text"
+                    v-model="noteForm.interventions.medication_details"
+                    placeholder="List medications administered..."
+                    class="intervention-input"
+                  />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.wound_care" />
+                    <span class="checkbox-text">Wound Care</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.wound_care"
+                    type="text"
+                    v-model="noteForm.interventions.wound_care_details"
+                    placeholder="Describe wound care provided..."
+                    class="intervention-input"
+                  />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.physiotherapy" />
+                    <span class="checkbox-text">Physiotherapy/Exercise</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.physiotherapy"
+                    type="text"
+                    v-model="noteForm.interventions.physiotherapy_details"
+                    placeholder="Describe exercises/physiotherapy..."
+                    class="intervention-input"
+                  />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.nutrition_support" />
+                    <span class="checkbox-text">Nutrition/Feeding Support</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.nutrition_support"
+                    type="text"
+                    v-model="noteForm.interventions.nutrition_details"
+                    placeholder="Describe nutrition support provided..."
+                    class="intervention-input"
+                  />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.hygiene_care" />
+                    <span class="checkbox-text">Hygiene/Personal Care</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.hygiene_care"
+                    type="text"
+                    v-model="noteForm.interventions.hygiene_details"
+                    placeholder="Describe personal care provided..."
+                    class="intervention-input"
+                  />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.counseling_education" />
+                    <span class="checkbox-text">Counseling/Education</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.counseling_education"
+                    type="text"
+                    v-model="noteForm.interventions.counseling_details"
+                    placeholder="Describe counseling/education provided..."
+                    class="intervention-input"
+                  />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="noteForm.interventions.other" />
+                    <span class="checkbox-text">Other Interventions</span>
+                  </label>
+                  <input
+                    v-show="noteForm.interventions.other"
+                    type="text"
+                    v-model="noteForm.interventions.other_details"
+                    placeholder="Specify other interventions..."
+                    class="intervention-input"
+                  />
                 </div>
 
                 <!-- Observations -->
-                <div class="note-section">
-                  <h4 class="section-title">👁️ Observations/Findings</h4>
-                  <div class="observations-grid">
-                    <div class="observation-item">
-                      <label>General Condition:</label>
-                      <span :class="'badge ' + getConditionBadgeColor(currentNote.general_condition)">
-                        {{ capitalizeFirst(currentNote.general_condition) }}
-                      </span>
-                    </div>
-                    <div class="observation-item">
-                      <label>Pain Level:</label>
-                      <span class="pain-display">
-                        {{ currentNote.pain_level }}/10
-                        <div class="pain-indicator-small">
-                          <div 
-                            class="pain-bar-small" 
-                            :style="{ width: (currentNote.pain_level * 10) + '%', backgroundColor: getPainColor(currentNote.pain_level) }"
-                          ></div>
-                        </div>
-                      </span>
-                    </div>
-                  </div>
-                  <div v-if="currentNote.wound_status" class="observation-text">
-                    <label>Wound Status:</label>
-                    <p>{{ currentNote.wound_status }}</p>
-                  </div>
-                  <div v-if="currentNote.other_observations" class="observation-text">
-                    <label>Other Observations:</label>
-                    <p>{{ currentNote.other_observations }}</p>
-                  </div>
+                <div class="form-section-header">
+                  <h3 class="form-section-title">👁️ Observations/Findings</h3>
+                </div>
+
+                <div class="form-group">
+                  <label>General Condition <span class="required">*</span></label>
+                  <SearchableSelect
+                    v-model="noteForm.general_condition"
+                    :options="conditionOptions"
+                    placeholder="Select condition..."
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Pain Level (0-10) <span class="required">*</span></label>
+                  <input type="number" min="0" max="10" v-model="noteForm.pain_level" required />
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label>Wound Status (if any)</label>
+                  <textarea
+                    v-model="noteForm.wound_status"
+                    rows="3"
+                    placeholder="Describe wound status, healing progress, etc..."
+                  ></textarea>
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label>Other Significant Observations</label>
+                  <textarea
+                    v-model="noteForm.other_observations"
+                    rows="3"
+                    placeholder="Note any other significant observations..."
+                  ></textarea>
                 </div>
 
                 <!-- Communication -->
-                <div class="note-section">
-                  <h4 class="section-title">👨‍👩‍👧‍👦 Family/Client Communication</h4>
-                  <div v-if="currentNote.education_provided" class="communication-item">
-                    <label>Education Provided:</label>
-                    <p>{{ currentNote.education_provided }}</p>
-                  </div>
-                  <div v-if="currentNote.family_concerns" class="communication-item">
-                    <label>Concerns Raised:</label>
-                    <p>{{ currentNote.family_concerns }}</p>
-                  </div>
-                  <div v-if="!currentNote.education_provided && !currentNote.family_concerns" class="no-communication">
-                    <em>No communication details documented.</em>
-                  </div>
+                <div class="form-section-header">
+                  <h3 class="form-section-title">👨‍👩‍👧‍👦 Family/Client Communication</h3>
                 </div>
 
-                <!-- Plan/Next Steps -->
-                <div class="note-section">
-                  <h4 class="section-title">📋 Plan / Next Steps</h4>
-                  <div v-if="currentNote.next_steps" class="plan-content">
-                    <p>{{ currentNote.next_steps }}</p>
-                  </div>
-                  <div v-else class="no-plan">
-                    <em>No plan documented for next visit.</em>
-                  </div>
+                <div class="form-group form-grid-full">
+                  <label>Education Provided</label>
+                  <textarea
+                    v-model="noteForm.education_provided"
+                    rows="3"
+                    placeholder="Describe education provided to patient/family..."
+                  ></textarea>
                 </div>
 
-                <!-- Signature & Timestamp -->
-                <div class="note-footer">
-                  <div class="signature-section">
-                    <div class="signature-info">
-                      <label>Nurse/Caregiver Signature:</label>
-                      <span class="signature">{{ currentNote.nurse_name }}</span>
-                    </div>
-                    <div class="timestamp-info">
-                      <label>Created:</label>
-                      <span>{{ formatDateTime(currentNote.created_at) }}</span>
-                    </div>
-                    <div v-if="currentNote.updated_at !== currentNote.created_at" class="timestamp-info">
-                      <label>Last Updated:</label>
-                      <span>{{ formatDateTime(currentNote.updated_at) }}</span>
-                    </div>
-                  </div>
+                <div class="form-group form-grid-full">
+                  <label>Concerns Raised by Family/Client</label>
+                  <textarea
+                    v-model="noteForm.family_concerns"
+                    rows="3"
+                    placeholder="Note any concerns raised by family or client..."
+                  ></textarea>
+                </div>
+
+                <!-- Plan -->
+                <div class="form-section-header">
+                  <h3 class="form-section-title">📋 Plan / Next Steps</h3>
+                </div>
+
+                <div class="form-group form-grid-full">
+                  <label>Plan for Next Visit</label>
+                  <textarea
+                    v-model="noteForm.next_steps"
+                    rows="4"
+                    placeholder="Outline plans for the next visit, follow-up care, adjustments needed..."
+                  ></textarea>
                 </div>
               </div>
             </div>
 
             <div class="modal-actions">
-              <button @click="closeViewModal" class="btn btn-secondary">
-                Close
-              </button>
-              <button @click="printNote" class="btn btn-secondary">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                Print
-              </button>
-              <button @click="editFromView" class="btn btn-primary">
-                Edit Note
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Delete Confirmation Modal -->
-        <div v-if="showDeleteModal && currentNote" class="modal-overlay">
-          <div class="modal modal-sm">
-            <div class="modal-header modal-header-danger">
-              <h3 class="modal-title">
-                <svg class="modal-icon modal-icon-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                Delete Progress Note
-              </h3>
-              <button @click="closeDeleteModal" class="modal-close">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div class="modal-body">
-              <p>
-                Are you sure you want to delete this progress note for <strong>{{ currentNote.patient_name }}</strong>? 
-                This action cannot be undone.
-              </p>
-              <div class="mt-3 p-3 bg-gray-50 rounded">
-                <small class="text-gray-600">
-                  <strong>Visit:</strong> {{ formatDate(currentNote.visit_date) }} at {{ currentNote.visit_time }}
-                </small>
-              </div>
-            </div>
-
-            <div class="modal-actions">
-              <button @click="closeDeleteModal" class="btn btn-secondary">
+              <button type="button" @click="closeNoteModal" class="btn btn-secondary">
                 Cancel
               </button>
-              <button
-                @click="deleteNote"
-                :disabled="isSaving"
-                class="btn btn-danger"
-              >
+              <button type="submit" :disabled="isSaving" class="btn btn-primary">
                 <div v-if="isSaving" class="spinner spinner-sm"></div>
-                Delete Note
+                {{ isEditing ? 'Update Note' : 'Save Note' }}
               </button>
             </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- View Modal -->
+      <div v-if="showViewModal && currentNote" class="modal-overlay" @click.self="closeViewModal">
+        <div class="modal modal-xl">
+          <div class="modal-header">
+            <h2 class="modal-title">
+              <svg class="modal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Progress Note - {{ currentNote.patient_name }}
+            </h2>
+            <button @click="closeViewModal" class="modal-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <div class="progress-note-view">
+              <!-- Header Info -->
+              <div class="note-header-card">
+                <div class="patient-nurse-info">
+                  <div class="info-item">
+                    <label>Patient:</label>
+                    <span>{{ currentNote.patient_name }}</span>
+                  </div>
+                  <div class="info-item">
+                    <label>Nurse/Caregiver:</label>
+                    <span>{{ currentNote.nurse_name }}</span>
+                  </div>
+                  <div class="info-item">
+                    <label>Visit Date:</label>
+                    <span>{{ formatDate(currentNote.visit_date) }}</span>
+                  </div>
+                  <div class="info-item">
+                    <label>Visit Time:</label>
+                    <span>{{ currentNote.visit_time }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Vital Signs -->
+              <div class="note-section">
+                <h4 class="section-title">🩺 Vital Signs</h4>
+                <div class="vitals-grid">
+                  <div class="vital-item">
+                    <label>Temperature:</label>
+                    <span>{{ currentNote.vitals?.temperature || 'N/A' }} °C</span>
+                  </div>
+                  <div class="vital-item">
+                    <label>Pulse:</label>
+                    <span>{{ currentNote.vitals?.pulse || 'N/A' }} bpm</span>
+                  </div>
+                  <div class="vital-item">
+                    <label>Respiration:</label>
+                    <span>{{ currentNote.vitals?.respiration || 'N/A' }} /min</span>
+                  </div>
+                  <div class="vital-item">
+                    <label>Blood Pressure:</label>
+                    <span>{{ currentNote.vitals?.blood_pressure || 'N/A' }} mmHg</span>
+                  </div>
+                  <div class="vital-item">
+                    <label>SpO₂:</label>
+                    <span>{{ currentNote.vitals?.spo2 || 'N/A' }} %</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Interventions -->
+              <div class="note-section">
+                <h4 class="section-title">💊 Interventions Provided</h4>
+                <div class="interventions-list">
+                  <div v-if="currentNote.interventions?.medication_administered" class="intervention-item">
+                    <strong>✓ Medication Administered:</strong>
+                    <span>{{ currentNote.interventions.medication_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="currentNote.interventions?.wound_care" class="intervention-item">
+                    <strong>✓ Wound Care:</strong>
+                    <span>{{ currentNote.interventions.wound_care_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="currentNote.interventions?.physiotherapy" class="intervention-item">
+                    <strong>✓ Physiotherapy/Exercise:</strong>
+                    <span>{{ currentNote.interventions.physiotherapy_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="currentNote.interventions?.nutrition_support" class="intervention-item">
+                    <strong>✓ Nutrition/Feeding Support:</strong>
+                    <span>{{ currentNote.interventions.nutrition_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="currentNote.interventions?.hygiene_care" class="intervention-item">
+                    <strong>✓ Hygiene/Personal Care:</strong>
+                    <span>{{ currentNote.interventions.hygiene_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="currentNote.interventions?.counseling_education" class="intervention-item">
+                    <strong>✓ Counseling/Education:</strong>
+                    <span>{{ currentNote.interventions.counseling_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="currentNote.interventions?.other" class="intervention-item">
+                    <strong>✓ Other:</strong>
+                    <span>{{ currentNote.interventions.other_details || 'Details not provided' }}</span>
+                  </div>
+                  <div v-if="!hasAnyInterventions(currentNote.interventions)" class="no-interventions">
+                    <em>No specific interventions documented.</em>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Observations -->
+              <div class="note-section">
+                <h4 class="section-title">👁️ Observations/Findings</h4>
+                <div class="observations-grid">
+                  <div class="observation-item">
+                    <label>General Condition:</label>
+                    <span :class="'modern-badge ' + getConditionBadgeColor(currentNote.general_condition)">
+                      {{ capitalizeFirst(currentNote.general_condition) }}
+                    </span>
+                  </div>
+                  <div class="observation-item">
+                    <label>Pain Level:</label>
+                    <span class="pain-display">
+                      {{ currentNote.pain_level }}/10
+                      <div class="pain-indicator-small">
+                        <div 
+                          class="pain-bar-small" 
+                          :style="{ width: (currentNote.pain_level * 10) + '%', backgroundColor: getPainColor(currentNote.pain_level) }"
+                        ></div>
+                      </div>
+                    </span>
+                  </div>
+                </div>
+                <div v-if="currentNote.wound_status" class="observation-text">
+                  <label>Wound Status:</label>
+                  <p>{{ currentNote.wound_status }}</p>
+                </div>
+                <div v-if="currentNote.other_observations" class="observation-text">
+                  <label>Other Observations:</label>
+                  <p>{{ currentNote.other_observations }}</p>
+                </div>
+              </div>
+
+              <!-- Communication -->
+              <div class="note-section">
+                <h4 class="section-title">👨‍👩‍👧‍👦 Family/Client Communication</h4>
+                <div v-if="currentNote.education_provided" class="communication-item">
+                  <label>Education Provided:</label>
+                  <p>{{ currentNote.education_provided }}</p>
+                </div>
+                <div v-if="currentNote.family_concerns" class="communication-item">
+                  <label>Concerns Raised:</label>
+                  <p>{{ currentNote.family_concerns }}</p>
+                </div>
+                <div v-if="!currentNote.education_provided && !currentNote.family_concerns" class="no-communication">
+                  <em>No communication details documented.</em>
+                </div>
+              </div>
+
+              <!-- Plan -->
+              <div class="note-section">
+                <h4 class="section-title">📋 Plan / Next Steps</h4>
+                <div v-if="currentNote.next_steps" class="plan-content">
+                  <p>{{ currentNote.next_steps }}</p>
+                </div>
+                <div v-else class="no-plan">
+                  <em>No plan documented for next visit.</em>
+                </div>
+              </div>
+
+              <!-- Footer -->
+              <div class="note-footer">
+                <div class="signature-section">
+                  <div class="signature-info">
+                    <label>Nurse/Caregiver Signature:</label>
+                    <span class="signature">{{ currentNote.nurse_name }}</span>
+                  </div>
+                  <div class="timestamp-info">
+                    <label>Created:</label>
+                    <span>{{ formatDateTime(currentNote.created_at) }}</span>
+                  </div>
+                  <div v-if="currentNote.updated_at !== currentNote.created_at" class="timestamp-info">
+                    <label>Last Updated:</label>
+                    <span>{{ formatDateTime(currentNote.updated_at) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeViewModal" class="btn btn-secondary">Close</button>
+            <button @click="editFromView" class="btn btn-primary">Edit Note</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Modal -->
+      <div v-if="showDeleteModal && currentNote" class="modal-overlay" @click.self="closeDeleteModal">
+        <div class="modal modal-sm">
+          <div class="modal-header">
+            <h3 class="modal-title">
+              <svg class="modal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-.834-1.964-.834-2.732 0L3.732 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Delete Progress Note
+            </h3>
+            <button @click="closeDeleteModal" class="modal-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <p>
+              Are you sure you want to delete this progress note for <strong>{{ currentNote.patient_name }}</strong>? 
+              This action cannot be undone.
+            </p>
+            <div class="mt-3 p-3 bg-gray-50 rounded">
+              <small class="text-gray-600">
+                <strong>Visit:</strong> {{ formatDate(currentNote.visit_date) }} at {{ currentNote.visit_time }}
+              </small>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeDeleteModal" class="btn btn-secondary">Cancel</button>
+            <button @click="deleteNote" :disabled="isSaving" class="btn btn-danger">
+              <div v-if="isSaving" class="spinner spinner-sm"></div>
+              Delete Note
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Toast Component -->
     <Toast />
   </MainLayout>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import MainLayout from '../../layout/MainLayout.vue'
 import Toast from '../../common/components/Toast.vue'
 import SearchableSelect from '../../common/components/SearchableSelect.vue'
+import * as progressNotesService from '../../services/progressNotesService'
 
-const router = useRouter()
 const toast = inject('toast')
 
 // Reactive data
-const progressNotes = ref([])
+const progressNotes = ref({ data: [], pagination: { current_page: 1, last_page: 1, per_page: 15, total: 0 } })
 const patients = ref([])
 const nurses = ref([])
+const statistics = ref({})
 const loading = ref(true)
+const isSaving = ref(false)
+
+// Filters
 const searchQuery = ref('')
 const patientFilter = ref('all')
 const nurseFilter = ref('all')
+const conditionFilter = ref('all')
 const dateFilter = ref('')
-const dateType = ref('visit') // 'visit' for visit_date, 'created' for created_at
+const dateType = ref('visit')
 
 // Modal states
 const showNoteModal = ref(false)
@@ -825,19 +838,16 @@ const showViewModal = ref(false)
 const showDeleteModal = ref(false)
 const isEditing = ref(false)
 const currentNote = ref(null)
-const isSaving = ref(false)
-
-// Dropdown state
 const activeDropdown = ref(null)
 
-// Options for select fields
+// Options
 const conditionOptions = [
   { value: 'improved', label: 'Improved' },
   { value: 'stable', label: 'Stable' },
   { value: 'deteriorating', label: 'Deteriorating' }
 ]
 
-// Form data
+// Form
 const noteForm = ref({
   patient_id: '',
   nurse_id: '',
@@ -875,22 +885,7 @@ const noteForm = ref({
   next_steps: ''
 })
 
-// Computed properties
-const filteredNotes = computed(() => {
-  return progressNotes.value.filter(note => {
-    const matchesSearch = !searchQuery.value || 
-      note.patient_name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      note.nurse_name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      note.other_observations?.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      note.next_steps?.toLowerCase().includes(searchQuery.value.toLowerCase())
-    
-    const matchesPatient = patientFilter.value === 'all' || note.patient_id == patientFilter.value
-    const matchesNurse = nurseFilter.value === 'all' || note.nurse_id == nurseFilter.value
-    
-    return matchesSearch && matchesPatient && matchesNurse
-  })
-})
-
+// Computed
 const patientOptions = computed(() => {
   return patients.value.map(patient => ({
     value: patient.id,
@@ -905,65 +900,160 @@ const nurseOptions = computed(() => {
   }))
 })
 
+// Safe statistics accessors
+const totalNotes = computed(() => {
+  return statistics.value?.total_notes || 0
+})
+
+const uniquePatients = computed(() => {
+  return statistics.value?.unique_patients || 0
+})
+
+const avgPainLevel = computed(() => {
+  const avg = statistics.value?.pain_level_average || 0
+  return parseFloat(avg).toFixed(1)
+})
+
+const abnormalVitals = computed(() => {
+  return statistics.value?.notes_with_abnormal_vitals || 0
+})
+
 // Methods
-const loadProgressNotes = async () => {
+const loadProgressNotes = async (page = 1) => {
   loading.value = true
   try {
-    // Build query parameters
-    const params = new URLSearchParams()
-    
-    if (patientFilter.value !== 'all') {
-      params.append('patient_id', patientFilter.value)
+    const filters = {
+      page,
+      per_page: 15,
+      patient_id: patientFilter.value !== 'all' ? patientFilter.value : undefined,
+      nurse_id: nurseFilter.value !== 'all' ? nurseFilter.value : undefined,
+      condition: conditionFilter.value !== 'all' ? conditionFilter.value : undefined,
+      date: dateFilter.value || undefined,
+      date_type: dateType.value,
+      search: searchQuery.value || undefined
     }
+
+    Object.keys(filters).forEach(key => filters[key] === undefined && delete filters[key])
+
+    const data = await progressNotesService.getProgressNotes(filters)
     
-    if (nurseFilter.value !== 'all') {
-      params.append('nurse_id', nurseFilter.value)
-    }
-    
-    if (dateFilter.value) {
-      params.append('date', dateFilter.value)
-      params.append('date_type', dateType.value)
-    }
-    
-    if (searchQuery.value) {
-      params.append('search', searchQuery.value)
-    }
-    
-    const queryString = params.toString()
-    const url = `/api/progress-notes${queryString ? '?' + queryString : ''}`
-    
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
+    if (data && data.success) {
+      progressNotes.value = {
+        data: data.data || [],
+        pagination: data.pagination || { current_page: 1, last_page: 1, per_page: 15, total: 0 }
       }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      progressNotes.value = data.data || data
-      console.log('Loaded progress notes:', progressNotes.value.length)
-    } else {
-      console.error('Failed to load progress notes')      
+      console.log('Loaded progress notes:', progressNotes.value.data.length) // Debug log
+      
+      // If we have notes but statistics are all zero, recalculate
+      if (progressNotes.value.data.length > 0 && statistics.value.total_notes === 0) {
+        console.log('Recalculating statistics from loaded notes')
+        calculateStatisticsFromNotes()
+      }
     }
   } catch (error) {
     console.error('Error loading progress notes:', error)
+    toast.showError('Failed to load progress notes')
+  } finally {
+    loading.value = false
   }
-  loading.value = false
+}
+
+const loadStatistics = async () => {
+  try {
+    // Get date range for last 30 days
+    const endDate = new Date()
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - 30)
+    
+    const filters = {
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0]
+    }
+    
+    const data = await progressNotesService.getStatistics(filters)
+    console.log('Statistics API response:', data) // Debug log
+    
+    if (data && data.success && data.data) {
+      statistics.value = data.data
+      console.log('Statistics loaded from API:', statistics.value) // Debug log
+    } else {
+      console.warn('Statistics API failed, calculating from loaded notes')
+      calculateStatisticsFromNotes()
+    }
+  } catch (error) {
+    console.error('Error loading statistics:', error)
+    console.warn('Calculating statistics from loaded notes as fallback')
+    calculateStatisticsFromNotes()
+  }
+}
+
+// Calculate statistics from loaded progress notes (fallback)
+const calculateStatisticsFromNotes = () => {
+  if (!progressNotes.value.data || progressNotes.value.data.length === 0) {
+    statistics.value = {
+      total_notes: 0,
+      unique_patients: 0,
+      unique_nurses: 0,
+      pain_level_average: 0,
+      notes_with_abnormal_vitals: 0
+    }
+    return
+  }
+  
+  const notes = progressNotes.value.data
+  
+  // Calculate unique patients
+  const uniquePatientIds = new Set(notes.map(note => note.patient_id))
+  
+  // Calculate unique nurses
+  const uniqueNurseIds = new Set(notes.map(note => note.nurse_id))
+  
+  // Calculate average pain level
+  const painLevels = notes.map(note => note.pain_level || 0)
+  const avgPain = painLevels.length > 0 
+    ? painLevels.reduce((sum, pain) => sum + pain, 0) / painLevels.length 
+    : 0
+  
+  // Count notes with abnormal vitals (simple heuristic)
+  const abnormalCount = notes.filter(note => {
+    if (!note.vitals) return false
+    const temp = parseFloat(note.vitals.temperature)
+    const pulse = parseFloat(note.vitals.pulse)
+    const spo2 = parseFloat(note.vitals.spo2)
+    
+    return (temp && (temp < 36 || temp > 38)) ||
+           (pulse && (pulse < 60 || pulse > 100)) ||
+           (spo2 && spo2 < 95)
+  }).length
+  
+  statistics.value = {
+    total_notes: notes.length,
+    unique_patients: uniquePatientIds.size,
+    unique_nurses: uniqueNurseIds.size,
+    pain_level_average: avgPain,
+    notes_with_abnormal_vitals: abnormalCount
+  }
+  
+  console.log('Statistics calculated from notes:', statistics.value)
+}
+
+// Debug method to check statistics
+const debugStatistics = () => {
+  console.log('=== DEBUG STATISTICS ===')
+  console.log('Raw statistics.value:', statistics.value)
+  console.log('Total Notes:', totalNotes.value)
+  console.log('Unique Patients:', uniquePatients.value)
+  console.log('Avg Pain:', avgPainLevel.value)
+  console.log('Abnormal Vitals:', abnormalVitals.value)
+  console.log('Progress Notes Data:', progressNotes.value)
+  alert('Check console for debug information')
 }
 
 const loadPatients = async () => {
   try {
-    const response = await fetch('/api/users?role=patient', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      patients.value = data.data || data
+    const data = await progressNotesService.getAvailablePatients()
+    if (data && data.success) {
+      patients.value = data.data || []
     }
   } catch (error) {
     console.error('Error loading patients:', error)
@@ -972,20 +1062,17 @@ const loadPatients = async () => {
 
 const loadNurses = async () => {
   try {
-    const response = await fetch('/api/users?role=nurse', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      nurses.value = data.data || data
+    const data = await progressNotesService.getAvailableNurses()
+    if (data && data.success) {
+      nurses.value = data.data || []
     }
   } catch (error) {
     console.error('Error loading nurses:', error)
   }
+}
+
+const formatAvgPain = (value) => {
+  return value ? parseFloat(value).toFixed(1) : '0.0'
 }
 
 const getConditionBadgeColor = (condition) => {
@@ -998,13 +1085,13 @@ const getConditionBadgeColor = (condition) => {
 }
 
 const getPainColor = (painLevel) => {
-  if (painLevel <= 3) return '#10b981' // Green
-  if (painLevel <= 6) return '#f59e0b' // Yellow
-  return '#ef4444' // Red
+  if (painLevel <= 3) return '#10b981'
+  if (painLevel <= 6) return '#f59e0b'
+  return '#ef4444'
 }
 
 const capitalizeFirst = (str) => {
-  return str.charAt(0).toUpperCase() + str.slice(1)
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : ''
 }
 
 const formatDate = (dateString) => {
@@ -1017,36 +1104,30 @@ const formatDateTime = (dateString) => {
   return new Date(dateString).toLocaleString()
 }
 
-// Fix for Issue 1: Date formatting helper functions
 const formatDateForInput = (dateString) => {
   if (!dateString) return ''
-  
-  // Handle different date formats that might come from backend
   const date = new Date(dateString)
-  
-  // Check if date is valid
-  if (isNaN(date.getTime())) {
-    console.warn('Invalid date received:', dateString)
-    return ''
-  }
-  
-  // Format as YYYY-MM-DD for HTML date input
+  if (isNaN(date.getTime())) return ''
   return date.toISOString().split('T')[0]
 }
 
 const formatTimeForInput = (timeString) => {
   if (!timeString) return ''
-  
-  // Handle different time formats
   if (timeString.includes(':')) {
-    // If it's already in HH:MM format, use as is
     const timeParts = timeString.split(':')
     if (timeParts.length >= 2) {
       return `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`
     }
   }
-  
   return timeString
+}
+
+const generateAvatar = (user) => {
+  if (!user) {
+    return 'https://ui-avatars.com/api/?name=N+A&color=667eea&background=f8f9fa&size=200&font-size=0.6'
+  }
+  const name = `${user.first_name || ''} ${user.last_name || ''}`
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&color=667eea&background=f8f9fa&size=200&font-size=0.6`
 }
 
 const toggleDropdown = (noteId) => {
@@ -1136,13 +1217,12 @@ const resetForm = () => {
   }
 }
 
-// Fixed populateForm function with proper date formatting
 const populateForm = (note) => {
   noteForm.value = {
     patient_id: note.patient_id,
     nurse_id: note.nurse_id,
-    visit_date: formatDateForInput(note.visit_date), // Fixed date formatting
-    visit_time: formatTimeForInput(note.visit_time), // Fixed time formatting
+    visit_date: formatDateForInput(note.visit_date),
+    visit_time: formatTimeForInput(note.visit_time),
     vitals: { 
       temperature: note.vitals?.temperature || '',
       pulse: note.vitals?.pulse || '',
@@ -1180,29 +1260,24 @@ const saveNote = async () => {
   isSaving.value = true
   
   try {
-    const url = isEditing.value ? `/api/progress-notes/${currentNote.value.id}` : '/api/progress-notes'
-    const method = isEditing.value ? 'PUT' : 'POST'
+    let response
+    if (isEditing.value) {
+      response = await progressNotesService.updateProgressNote(currentNote.value.id, noteForm.value)
+    } else {
+      response = await progressNotesService.createProgressNote(noteForm.value)
+    }
     
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(noteForm.value)
-    })
-    
-    if (response.ok) {
+    if (response && response.success) {
       await loadProgressNotes()
+      await loadStatistics()
       closeNoteModal()
       toast.showSuccess(isEditing.value ? 'Progress note updated successfully!' : 'Progress note created successfully!')
     } else {
-      console.error('Failed to save progress note')
-      toast.showError(isEditing.value ? 'Failed to update progress note. Please try again.' : 'Failed to create progress note. Please try again.')
+      toast.showError(response?.message || 'Failed to save progress note')
     }
   } catch (error) {
     console.error('Error saving progress note:', error)
-    toast.showError(isEditing.value ? 'An error occurred while updating the progress note.' : 'An error occurred while creating the progress note.')
+    toast.showError('An error occurred while saving the progress note')
   }
   
   isSaving.value = false
@@ -1212,40 +1287,40 @@ const deleteNote = async () => {
   isSaving.value = true
   
   try {
-    const response = await fetch(`/api/progress-notes/${currentNote.value.id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    const response = await progressNotesService.deleteProgressNote(currentNote.value.id)
     
-    if (response.ok) {
+    if (response && response.success) {
       await loadProgressNotes()
+      await loadStatistics()
       closeDeleteModal()
       toast.showSuccess('Progress note deleted successfully!')
     } else {
-      console.error('Failed to delete progress note')
-      toast.showError('Failed to delete progress note. Please try again.')
+      toast.showError(response?.message || 'Failed to delete progress note')
     }
   } catch (error) {
     console.error('Error deleting progress note:', error)
-    toast.showError('An error occurred while deleting the progress note.')
+    toast.showError('An error occurred while deleting the progress note')
   }
   
   isSaving.value = false
 }
 
 const duplicateNote = async (note) => {
-  // Create a new note based on the existing one
-  isEditing.value = false
-  currentNote.value = null
-  populateForm(note)
-  // Clear visit date and time for new entry
-  noteForm.value.visit_date = new Date().toISOString().split('T')[0]
-  noteForm.value.visit_time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  showNoteModal.value = true
-  activeDropdown.value = null
+  try {
+    const response = await progressNotesService.duplicateProgressNote(note.id)
+    
+    if (response && response.success) {
+      await loadProgressNotes()
+      await loadStatistics()
+      toast.showSuccess('Progress note duplicated successfully!')
+      activeDropdown.value = null
+    } else {
+      toast.showError(response?.message || 'Failed to duplicate progress note')
+    }
+  } catch (error) {
+    console.error('Error duplicating progress note:', error)
+    toast.showError('An error occurred while duplicating the progress note')
+  }
 }
 
 const hasAnyInterventions = (interventions) => {
@@ -1262,80 +1337,79 @@ const hasAnyInterventions = (interventions) => {
   )
 }
 
-const printNote = () => {
-  // Implementation for printing the note
-  window.print()
-}
-
 const exportNotes = async () => {
   try {
-    const loadingToast = toast.showInfo ? toast.showInfo('Preparing export...') : null
+    toast.showInfo('Preparing export...')
     
-    // Build query parameters based on current filters
-    const params = new URLSearchParams()
-    
-    if (patientFilter.value !== 'all') {
-      params.append('patient_id', patientFilter.value)
+    const filters = {
+      patient_id: patientFilter.value !== 'all' ? patientFilter.value : undefined,
+      nurse_id: nurseFilter.value !== 'all' ? nurseFilter.value : undefined,
+      condition: conditionFilter.value !== 'all' ? conditionFilter.value : undefined,
+      date: dateFilter.value || undefined,
+      date_type: dateType.value,
+      search: searchQuery.value || undefined
     }
     
-    if (nurseFilter.value !== 'all') {
-      params.append('nurse_id', nurseFilter.value)
-    }
+    Object.keys(filters).forEach(key => filters[key] === undefined && delete filters[key])
     
-    if (dateFilter.value) {
-      params.append('date', dateFilter.value)
-      params.append('date_type', dateType.value)
-    }
+    const { blob, filename } = await progressNotesService.exportProgressNotes(filters)
     
-    if (searchQuery.value) {
-      params.append('search', searchQuery.value)
-    }
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
     
-    const queryString = params.toString()
-    const url = `/api/progress-notes/export${queryString ? '?' + queryString : ''}`
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-      }
-    })
-    
-    if (response.ok) {
-      const contentDisposition = response.headers.get('Content-Disposition')
-      let filename = 'progress_notes_export.csv'
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename=(.+)/)
-        if (filenameMatch) {
-          filename = filenameMatch[1]
-        }
-      }
-      
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(downloadUrl)
-      
-      toast.showSuccess('Progress notes exported successfully!')
-    } else {
-      const errorData = await response.json()
-      console.error('Failed to export progress notes:', errorData)
-      toast.showError(errorData.message || 'Failed to export progress notes. Please try again.')
-    }
+    toast.showSuccess('Progress notes exported successfully!')
   } catch (error) {
-    console.error('Error exporting progress notes:', error)
-    toast.showError('An error occurred while exporting progress notes.')
+    console.error('Error:', error)
+    toast.showError('Failed to export')
   }
 }
 
-// Close dropdown when clicking outside
+const goToPage = (page) => {
+  if (page >= 1 && page <= progressNotes.value.pagination.last_page) {
+    loadProgressNotes(page)
+  }
+}
+
+const nextPage = () => {
+  if (progressNotes.value.pagination.current_page < progressNotes.value.pagination.last_page) {
+    goToPage(progressNotes.value.pagination.current_page + 1)
+  }
+}
+
+const prevPage = () => {
+  if (progressNotes.value.pagination.current_page > 1) {
+    goToPage(progressNotes.value.pagination.current_page - 1)
+  }
+}
+
+const getPaginationPages = () => {
+  const pages = []
+  const maxVisible = 5
+  const current = progressNotes.value.pagination.current_page
+  const last = progressNotes.value.pagination.last_page
+  
+  let start = Math.max(1, current - Math.floor(maxVisible / 2))
+  let end = Math.min(last, start + maxVisible - 1)
+  
+  if (end - start < maxVisible - 1) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  
+  return pages
+}
+
 const handleClickOutside = (event) => {
-  if (!event.target.closest('.action-dropdown')) {
+  if (!event.target.closest('.action-cell')) {
     activeDropdown.value = null
   }
 }
@@ -1344,6 +1418,7 @@ const handleClickOutside = (event) => {
 onMounted(async () => {
   await Promise.all([
     loadProgressNotes(),
+    loadStatistics(),
     loadPatients(),
     loadNurses()
   ])
@@ -1354,152 +1429,828 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 
-// Watch for filter changes and reload data
-watch([patientFilter, nurseFilter, dateFilter, dateType, searchQuery], () => {
-  // Debounce the search to avoid too many API calls
-  if (searchQuery.value) {
-    setTimeout(() => {
-      loadProgressNotes()
-    }, 500)
-  } else {
-    loadProgressNotes()
-  }
-}, { deep: true })
+// Watchers
+let searchDebounceTimer = null
+
+watch(searchQuery, () => {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    loadProgressNotes(1)
+  }, 500)
+})
+
+watch([patientFilter, nurseFilter, conditionFilter, dateFilter, dateType], () => {
+  loadProgressNotes(1)
+})
 </script>
 
 <style scoped>
-/* Progress Notes Specific Styles */
-.progress-notes-page {
-  min-height: 100vh;
-  background: #f8f9fa;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+* {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
+.progress-notes-page {
+  padding: 32px;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+.page-header-content h1 {
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.8px;
+}
+
+.page-header-content p {
+  font-size: 15px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 400;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Modern Buttons */
+.btn-modern {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-modern svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-modern.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-modern.btn-primary:hover {
+  background: #5a67d8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-modern.btn-secondary {
+  background: white;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.btn-modern.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f1f5f9;
+  display: flex;
+  gap: 16px;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon svg {
+  width: 28px;
+  height: 28px;
+  color: white;
+}
+
+.stat-icon.blue {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.stat-icon.green {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.stat-icon.yellow {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.stat-icon.purple {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  margin-bottom: 6px;
+  letter-spacing: -1px;
+}
+
+.stat-change {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stat-change.positive {
+  color: #10b981;
+}
+
+.stat-change.neutral {
+  color: #f59e0b;
+}
+
+/* Filters Section */
+.filters-section {
+  background: white;
+  padding: 20px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f1f5f9;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-wrapper {
+  flex: 1;
+  min-width: 300px;
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 14px 10px 44px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.filters-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 150px;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Loading State */
+.loading-state {
+  background: white;
+  padding: 60px;
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #f1f5f9;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Table Styles */
 .progress-notes-table-container {
   background: white;
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f1f5f9;
   overflow: visible;
 }
 
-.progress-notes-table {
+.modern-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
-.progress-notes-table thead {
-  background: #f9fafb;
+.modern-table thead {
+  background: #f8fafc;
 }
 
-.progress-notes-table th {
-  padding: 0.75rem 1.5rem;
+.modern-table th {
+  padding: 16px 20px;
   text-align: left;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid #e5e7eb;
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.progress-notes-table tbody tr:hover {
-  background: #f9fafb;
+.modern-table tbody tr {
+  transition: all 0.2s;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.progress-notes-table td {
-  padding: 1rem 1.5rem;
-  white-space: nowrap;
-  font-size: 0.875rem;
-  border-bottom: 1px solid #e5e7eb;
+.modern-table tbody tr:hover {
+  background: #f8fafc;
 }
 
-/* Patient Info */
-.patient-info {
+.modern-table td {
+  padding: 16px 20px;
+  font-size: 14px;
+  color: #334155;
+  vertical-align: middle;
+}
+
+/* User Cell */
+.user-cell {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
-.patient-avatar {
-  flex-shrink: 0;
-  width: 2.5rem;
-  height: 2.5rem;
-}
-
-.patient-avatar img {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
+.user-avatar-table {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   object-fit: cover;
+  border: 2px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
-.patient-details {
-  margin-left: 1rem;
+.user-name-table {
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 2px;
 }
 
-.patient-name {
+.user-id-table {
+  font-size: 12px;
+  color: #94a3b8;
   font-weight: 500;
-  color: #1f2937;
 }
 
-.patient-id {
-  color: #6b7280;
-  font-size: 0.875rem;
+/* Contact Cell */
+.contact-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-/* Nurse Info */
-.nurse-info .nurse-name {
+.contact-primary {
+  font-size: 14px;
+  color: #334155;
   font-weight: 500;
-  color: #1f2937;
 }
 
-.nurse-info .nurse-license {
-  color: #6b7280;
-  font-size: 0.875rem;
+.contact-secondary {
+  font-size: 13px;
+  color: #94a3b8;
 }
 
-/* Visit Info */
-.visit-info .visit-date {
-  font-weight: 500;
-  color: #1f2937;
+/* Modern Badges */
+.modern-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
 }
 
-.visit-info .visit-time {
-  color: #6b7280;
-  font-size: 0.875rem;
+.modern-badge.badge-success {
+  background: #d1fae5;
+  color: #065f46;
 }
 
-/* Pain Level Display */
+.modern-badge.badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.modern-badge.badge-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.modern-badge.badge-secondary {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Pain Level */
 .pain-level {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .pain-score {
-  font-weight: 500;
-  color: #1f2937;
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 14px;
 }
 
 .pain-indicator {
   width: 60px;
-  height: 4px;
+  height: 6px;
   background: #e5e7eb;
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .pain-bar {
   height: 100%;
   transition: width 0.3s ease;
+  border-radius: 3px;
 }
 
-/* Form Sections */
+/* Action Cell */
+.action-cell {
+  position: relative;
+}
+
+.action-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.action-btn svg {
+  width: 18px;
+  height: 18px;
+  color: #64748b;
+}
+
+/* Modern Dropdown */
+.modern-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  min-width: 200px;
+  z-index: 1000;
+  padding: 8px;
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-item-modern {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.dropdown-item-modern:hover {
+  background: #f8fafc;
+}
+
+.dropdown-item-modern svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dropdown-item-modern.danger {
+  color: #dc2626;
+}
+
+.dropdown-item-modern.danger:hover {
+  background: #fef2f2;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 8px 0;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+}
+
+.empty-state svg {
+  width: 64px;
+  height: 64px;
+  color: #cbd5e1;
+  margin: 0 auto 16px;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.empty-state p {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+
+/* Pagination */
+.pagination-container {
+  padding: 20px 24px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pagination-info {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pagination-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pagination-pages {
+  display: flex;
+  gap: 4px;
+}
+
+.pagination-page {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-page:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.pagination-page.active {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  background: white;
+  border-radius: 20px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-xl {
+  max-width: 1000px;
+}
+
+.modal-sm {
+  max-width: 450px;
+}
+
+.modal-header {
+  padding: 24px 28px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-icon {
+  width: 24px;
+  height: 24px;
+  color: #667eea;
+}
+
+.modal-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: #f8fafc;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: #f1f5f9;
+  transform: scale(1.05);
+}
+
+.modal-close svg {
+  width: 20px;
+  height: 20px;
+  color: #64748b;
+}
+
+.modal-body {
+  padding: 28px;
+  max-height: calc(90vh - 160px);
+  overflow-y: auto;
+}
+
+.modal-actions {
+  padding: 20px 28px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: #f8fafc;
+}
+
+/* Form Styles */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.form-group label .required {
+  color: #ef4444;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-grid-full {
+  grid-column: 1 / -1;
+}
+
 .form-section-header {
   grid-column: 1 / -1;
-  margin-top: 2rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid #e5e7eb;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
 }
 
 .form-section-header:first-child {
@@ -1507,263 +2258,291 @@ watch([patientFilter, nurseFilter, dateFilter, dateType, searchQuery], () => {
 }
 
 .form-section-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
-/* Fix for Issue 2: Intervention input styling */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.checkbox-text {
+  font-size: 14px;
+  color: #334155;
+  font-weight: 600;
+}
+
 .intervention-input {
   width: 100%;
-  padding: 0.75rem;
-  margin-top: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  background: white;
+  padding: 10px 14px;
+  margin-top: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.2s;
 }
 
 .intervention-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.intervention-input::placeholder {
-  color: #9ca3af;
-}
-
-/* Improved checkbox styling for interventions */
-.checkbox-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  user-select: none;
-  margin-bottom: 0.5rem;
-}
-
-.checkbox-label input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
-  height: 0;
-  width: 0;
-}
-
-.checkmark {
-  width: 18px;
-  height: 18px;
-  background-color: #fff;
-  border: 2px solid #d1d5db;
-  border-radius: 4px;
-  position: relative;
   transition: all 0.2s;
-  flex-shrink: 0;
-  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.checkbox-label:hover input[type="checkbox"]:not(:disabled) ~ .checkmark {
-  border-color: #3b82f6;
+.btn-primary {
+  background: #667eea;
+  color: white;
 }
 
-.checkbox-label input[type="checkbox"]:checked ~ .checkmark {
-  background-color: #3b82f6;
-  border-color: #3b82f6;
+.btn-primary:hover {
+  background: #5a67d8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-.checkbox-label input[type="checkbox"]:checked ~ .checkmark::after {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 2px;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.btn-secondary {
+  background: white;
+  color: #334155;
+  border: 1px solid #e2e8f0;
 }
 
-.checkbox-text {
-  font-weight: 500;
-  color: #374151;
-  font-size: 0.875rem;
-  line-height: 1.5;
+.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
-/* View Modal Styles */
+.btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+}
+
+/* View Styles */
 .progress-note-view {
-  space-y: 1.5rem;
+  space-y: 24px;
 }
 
 .note-header-card {
   background: #f8fafc;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 
 .patient-nurse-info {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  gap: 16px;
 }
 
 .info-item {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .info-item label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .info-item span {
   font-weight: 600;
-  color: #1f2937;
+  color: #0f172a;
+  font-size: 15px;
 }
 
 .note-section {
   background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
 }
 
 .section-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 1rem 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
-/* Vitals Grid */
 .vitals-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
+  gap: 16px;
 }
 
 .vital-item {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .vital-item label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .vital-item span {
   font-weight: 600;
-  color: #1f2937;
+  color: #0f172a;
 }
 
-/* Interventions List */
 .interventions-list {
-  space-y: 1rem;
+  space-y: 12px;
 }
 
 .intervention-item {
-  padding: 0.75rem;
+  padding: 12px;
   background: #f9fafb;
-  border-radius: 0.5rem;
+  border-radius: 8px;
   border-left: 4px solid #10b981;
 }
 
 .intervention-item strong {
   display: block;
   color: #065f46;
-  margin-bottom: 0.25rem;
+  margin-bottom: 4px;
+  font-size: 13px;
 }
 
 .intervention-item span {
   color: #374151;
+  font-size: 14px;
 }
 
-.no-interventions {
-  padding: 1rem;
+.no-interventions,
+.no-communication,
+.no-plan {
+  padding: 16px;
   text-align: center;
-  color: #6b7280;
+  color: #64748b;
   background: #f9fafb;
-  border-radius: 0.5rem;
+  border-radius: 8px;
+  font-style: italic;
 }
 
-/* Observations */
 .observations-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .observation-item {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .observation-item label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
 }
 
-.observation-text {
-  margin-top: 1rem;
-}
-
-.observation-text label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
-  display: block;
-  margin-bottom: 0.5rem;
-}
-
-.observation-text p {
-  margin: 0;
-  color: #374151;
-  line-height: 1.5;
-}
-
-/* Pain Display in View */
 .pain-display {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .pain-indicator-small {
   width: 40px;
-  height: 4px;
+  height: 6px;
   background: #e5e7eb;
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .pain-bar-small {
   height: 100%;
   transition: width 0.3s ease;
+  border-radius: 3px;
 }
 
-/* Communication & Plan */
+.observation-text {
+  margin-top: 16px;
+}
+
+.observation-text label {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.observation-text p {
+  margin: 0;
+  color: #374151;
+  line-height: 1.6;
+}
+
 .communication-item {
-  margin-bottom: 1rem;
+  margin-bottom: 16px;
 }
 
 .communication-item:last-child {
@@ -1771,112 +2550,116 @@ watch([patientFilter, nurseFilter, dateFilter, dateType, searchQuery], () => {
 }
 
 .communication-item label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
   display: block;
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
 }
 
 .communication-item p {
   margin: 0;
   color: #374151;
-  line-height: 1.5;
-}
-
-.no-communication,
-.no-plan {
-  padding: 1rem;
-  text-align: center;
-  color: #6b7280;
-  background: #f9fafb;
-  border-radius: 0.5rem;
+  line-height: 1.6;
 }
 
 .plan-content p {
   margin: 0;
   color: #374151;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-/* Note Footer */
 .note-footer {
   background: #f8fafc;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-top: 1.5rem;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
 }
 
 .signature-section {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  gap: 16px;
 }
 
 .signature-info,
 .timestamp-info {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .signature-info label,
 .timestamp-info label {
-  font-weight: 500;
-  color: #6b7280;
-  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .signature {
   font-weight: 600;
-  color: #1f2937;
+  color: #0f172a;
   font-style: italic;
 }
 
 .timestamp-info span {
   color: #374151;
-  font-size: 0.875rem;
+  font-size: 13px;
 }
 
-/* Empty State */
-.empty-state {
-  text-align: center;
-  padding: 3rem;
+.mt-3 {
+  margin-top: 12px;
 }
 
-.empty-state svg {
-  margin: 0 auto 1rem;
-  width: 3rem;
-  height: 3rem;
-  color: #9ca3af;
+.p-3 {
+  padding: 12px;
 }
 
-.empty-state h3 {
-  margin: 0 0 0.25rem 0;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #1f2937;
+.bg-gray-50 {
+  background: #f9fafb;
 }
 
-.empty-state p {
-  margin: 0;
-  font-size: 0.875rem;
-  color: #6b7280;
+.rounded {
+  border-radius: 8px;
 }
 
-/* Responsive Design */
+.text-gray-600 {
+  color: #64748b;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .progress-notes-table {
-    font-size: 0.8125rem;
+  .progress-notes-page {
+    padding: 16px;
   }
   
-  .progress-notes-table th,
-  .progress-notes-table td {
-    padding: 0.75rem 1rem;
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
   }
   
-  .patient-details {
-    margin-left: 0.75rem;
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .filters-section {
+    flex-direction: column;
+  }
+  
+  .search-wrapper {
+    min-width: 100%;
+  }
+  
+  .filters-group {
+    flex-direction: column;
+  }
+  
+  .filter-select {
+    width: 100%;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
   }
   
   .patient-nurse-info {
@@ -1889,16 +2672,6 @@ watch([patientFilter, nurseFilter, dateFilter, dateType, searchQuery], () => {
   
   .observations-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .progress-notes-table-container {
-    overflow-x: auto;
-  }
-  
-  .progress-notes-table {
-    min-width: 800px;
   }
 }
 </style>
