@@ -78,7 +78,7 @@
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
                 </svg>
-                <span>+15.2% from last period</span>
+                <span>Period total</span>
               </div>
             </div>
           </div>
@@ -96,7 +96,7 @@
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
                 </svg>
-                <span>+3.2% from last period</span>
+                <span>Overall rate</span>
               </div>
             </div>
           </div>
@@ -114,7 +114,7 @@
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
                 </svg>
-                <span>+2 drivers</span>
+                <span>Active drivers</span>
               </div>
             </div>
           </div>
@@ -147,7 +147,7 @@
             </div>
 
             <!-- Priority Analysis -->
-            <div class="table-container" v-if="transportUtilization.priority_levels">
+            <div class="table-container" v-if="transportUtilization.priority_levels && transportUtilization.priority_levels.length > 0">
               <h4>Priority Levels Analysis</h4>
               <table class="data-table">
                 <thead>
@@ -179,7 +179,7 @@
             </div>
 
             <!-- Status Distribution -->
-            <div class="stats-grid" v-if="transportUtilization.status_distribution">
+            <div class="stats-grid" v-if="transportUtilization.status_distribution && transportUtilization.status_distribution.length > 0">
               <div class="stat-card" v-for="status in transportUtilization.status_distribution" :key="status.status">
                 <div class="stat-value">{{ status.count }}</div>
                 <div class="stat-label">{{ formatStatus(status.status) }}</div>
@@ -205,7 +205,7 @@
             </div>
 
             <!-- Completion Rates -->
-            <div class="table-container" v-if="driverPerformance.completion_rates">
+            <div class="table-container" v-if="driverPerformance.completion_rates && driverPerformance.completion_rates.length > 0">
               <h4>Driver Completion Rates</h4>
               <div class="table-scroll">
                 <table class="data-table">
@@ -248,7 +248,7 @@
             </div>
 
             <!-- Response Times -->
-            <div class="table-container" v-if="driverPerformance.response_times">
+            <div class="table-container" v-if="driverPerformance.response_times && driverPerformance.response_times.length > 0">
               <h4>Average Response Times</h4>
               <table class="data-table">
                 <thead>
@@ -279,7 +279,7 @@
             </div>
 
             <!-- Driver Ratings -->
-            <div class="table-container" v-if="driverPerformance.driver_ratings">
+            <div class="table-container" v-if="driverPerformance.driver_ratings && driverPerformance.driver_ratings.length > 0">
               <h4>Driver Ratings Summary</h4>
               <table class="data-table">
                 <thead>
@@ -325,11 +325,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, inject } from 'vue'
+import { ref, onMounted, nextTick, inject } from 'vue'
 import MainLayout from '../../layout/MainLayout.vue'
 import Toast from '../../common/components/Toast.vue'
 import Chart from 'chart.js/auto'
-import { apiGet, apiRequest } from '@/utils/api'
+import {
+  getTransportUtilization,
+  getDriverPerformance,
+  exportTransportReport,
+  exportAllTransportReports
+} from '../../services/transportReportsService'
 
 const toast = inject('toast')
 
@@ -405,12 +410,12 @@ const getAvailableDrivers = () => {
 // Methods
 const loadTransportUtilization = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
-    const data = await apiGet(`/api/reports/transport-utilization-report?${params}`)
+    const data = await getTransportUtilization(filterParams)
     if (data) {
       transportUtilization.value = data
       await nextTick()
@@ -425,12 +430,12 @@ const loadTransportUtilization = async () => {
 
 const loadDriverPerformance = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
-    const data = await apiGet(`/api/reports/driver-performance-report?${params}`)
+    const data = await getDriverPerformance(filterParams)
     if (data) {
       driverPerformance.value = data
       await nextTick()
@@ -452,12 +457,10 @@ const renderRequestVolumeChart = () => {
   
   const ctx = requestVolumeChart.value.getContext('2d')
   
-  // Handle data from transportUtilizationReport
   let data = []
   if (transportUtilization.value.request_volumes) {
     data = transportUtilization.value.request_volumes
   } else if (transportUtilization.value.peak_hours) {
-    // Alternative data source if request_volumes is not available
     data = transportUtilization.value.peak_hours.map(item => ({
       date: `Hour ${item.hour}`,
       total_requests: item.request_count,
@@ -467,7 +470,6 @@ const renderRequestVolumeChart = () => {
   }
   
   if (data.length === 0) {
-    // Show empty chart message
     ctx.fillStyle = '#6b7280'
     ctx.textAlign = 'center'
     ctx.fillText('No data available for the selected period', ctx.canvas.width / 2, ctx.canvas.height / 2)
@@ -559,7 +561,6 @@ const renderTransportTypesChart = () => {
   if (transportUtilization.value.transport_types) {
     data = transportUtilization.value.transport_types
   } else if (transportUtilization.value.request_volumes) {
-    // Calculate transport types from request volumes
     const ambulanceTotal = transportUtilization.value.request_volumes.reduce((sum, item) => sum + (item.ambulance_requests || 0), 0)
     const regularTotal = transportUtilization.value.request_volumes.reduce((sum, item) => sum + (item.regular_requests || 0), 0)
     
@@ -610,10 +611,9 @@ const renderDriverRatingsChart = () => {
   if (driverPerformance.value.driver_ratings) {
     data = driverPerformance.value.driver_ratings
   } else if (driverPerformance.value.completion_rates) {
-    // Use completion rates as proxy if ratings not available
     data = driverPerformance.value.completion_rates.map(item => ({
       driver: item.driver,
-      avg_rating: item.completion_rate / 20 // Convert percentage to 5-point scale
+      avg_rating: item.completion_rate / 20
     }))
   }
   
@@ -674,7 +674,7 @@ const handlePeriodChange = () => {
       dateFrom.setFullYear(today.getFullYear() - 1)
       break
     default:
-      return // custom range, don't change dates
+      return
   }
   
   filters.value.dateFrom = dateFrom.toISOString().split('T')[0]
@@ -705,44 +705,71 @@ const refreshAllReports = async () => {
 
 const exportReport = async (reportType) => {
   try {
-    const params = new URLSearchParams({
-      report_type: reportType,
-      format: 'csv',
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
-    
-    const response = await apiRequest(`/api/reports/export-transport-reports?${params}`, {
-      method: 'GET'
-    })
-    
-    if (response && response.ok) {
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${reportType}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast.showSuccess('Report exported successfully')
-    } else {
-      throw new Error('Export failed')
     }
+    
+    const { blob, filename } = await exportTransportReport(reportType, filterParams)
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    toast.showSuccess('Report exported successfully')
   } catch (error) {
     console.error('Error exporting report:', error)
-    toast.showError('Failed to export report')
+    toast.showError(error.message || 'Failed to export report')
   }
 }
 
-const exportAllReports = () => {
-  const reports = ['transport_utilization', 'driver_performance']
-  
-  reports.forEach((reportType, index) => {
-    setTimeout(() => exportReport(reportType), index * 1000)
-  })
+const exportAllReports = async () => {
+  try {
+    const filterParams = {
+      date_from: filters.value.dateFrom,
+      date_to: filters.value.dateTo
+    }
+    
+    toast.showInfo('Exporting all reports... This may take a moment.')
+    
+    const results = await exportAllTransportReports(filterParams)
+    
+    let successCount = 0
+    let failureCount = 0
+    
+    results.forEach(result => {
+      if (result.success) {
+        const url = window.URL.createObjectURL(result.blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = result.filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        successCount++
+      } else {
+        failureCount++
+        console.error(`Failed to export ${result.reportType}:`, result.error)
+      }
+    })
+    
+    if (successCount > 0) {
+      toast.showSuccess(`Successfully exported ${successCount} report(s)`)
+    }
+    
+    if (failureCount > 0) {
+      toast.showWarning(`${failureCount} report(s) failed to export`)
+    }
+  } catch (error) {
+    console.error('Error exporting all reports:', error)
+    toast.showError('Failed to export reports')
+  }
 }
 
 // Utility functions
@@ -771,8 +798,10 @@ const formatTransportType = (type) => {
 }
 
 const calculateCompletionRate = (priority) => {
-  // Mock calculation - would be based on actual data
-  return Math.round(Math.random() * 30 + 70) // 70-100%
+  if (!priority) return 0
+  const total = priority.count || 0
+  const completed = priority.completed || 0
+  return total > 0 ? Math.round((completed / total) * 100) : 0
 }
 
 const getPriorityBadge = (priority) => {
@@ -827,6 +856,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Styles remain the same as before */
 .reports-page {
   min-height: 100vh;
   background: #f8f9fa;
@@ -990,14 +1020,6 @@ onMounted(() => {
 
 .summary-change.positive {
   color: #10b981;
-}
-
-.summary-change.negative {
-  color: #ef4444;
-}
-
-.summary-change.neutral {
-  color: #6b7280;
 }
 
 .summary-change svg {

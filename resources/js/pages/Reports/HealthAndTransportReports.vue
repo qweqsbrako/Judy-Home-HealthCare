@@ -384,6 +384,15 @@ import { ref, onMounted, nextTick, inject } from 'vue'
 import MainLayout from '../../layout/MainLayout.vue'
 import Toast from '../../common/components/Toast.vue'
 import Chart from 'chart.js/auto'
+import {
+  getPatientHealthTrends,
+  getProgressNotesAnalytics,
+  getPatientOutcomes,
+  getMedicalConditions,
+  getAvailablePatients,
+  exportPatientReport,
+  exportAllPatientReports
+} from '../../services/patientReportsService'
 
 const toast = inject('toast')
 
@@ -423,46 +432,29 @@ let diseasePrevalenceChartInstance = null
 // Methods
 const loadAvailablePatients = async () => {
   try {
-    const response = await fetch('/api/users?role=patient', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      availablePatients.value = data.data || data
-    }
+    const response = await getAvailablePatients()
+    availablePatients.value = response.data || response
   } catch (error) {
     console.error('Error loading patients:', error)
+    toast.showError('Failed to load patients')
   }
 }
 
 const loadHealthTrends = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
     if (filters.value.patientId) {
-      params.append('patient_id', filters.value.patientId)
+      filterParams.patient_id = filters.value.patientId
     }
     
-    const response = await fetch(`/api/reports/patient-health-trends?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      healthTrends.value = await response.json()
-      await nextTick()
-      renderConditionTrendsChart()
-      renderPainLevelsChart()
-    }
+    healthTrends.value = await getPatientHealthTrends(filterParams)
+    await nextTick()
+    renderConditionTrendsChart()
+    renderPainLevelsChart()
   } catch (error) {
     console.error('Error loading health trends:', error)
     toast.showError('Failed to load health trends')
@@ -471,24 +463,19 @@ const loadHealthTrends = async () => {
 
 const loadProgressNotes = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
-    
-    const response = await fetch(`/api/reports/progress-notes-analytics?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      progressNotes.value = await response.json()
-      await nextTick()
-      renderPainTrendsChart()
-      renderInterventionChart()
     }
+    
+    if (filters.value.patientId) {
+      filterParams.patient_id = filters.value.patientId
+    }
+    
+    progressNotes.value = await getProgressNotesAnalytics(filterParams)
+    await nextTick()
+    renderPainTrendsChart()
+    renderInterventionChart()
   } catch (error) {
     console.error('Error loading progress notes:', error)
     toast.showError('Failed to load progress notes analytics')
@@ -497,23 +484,18 @@ const loadProgressNotes = async () => {
 
 const loadPatientOutcomes = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
-    
-    const response = await fetch(`/api/reports/patient-outcomes?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      patientOutcomes.value = await response.json()
-      await nextTick()
-      renderSatisfactionChart()
     }
+    
+    if (filters.value.patientId) {
+      filterParams.patient_id = filters.value.patientId
+    }
+    
+    patientOutcomes.value = await getPatientOutcomes(filterParams)
+    await nextTick()
+    renderSatisfactionChart()
   } catch (error) {
     console.error('Error loading patient outcomes:', error)
     toast.showError('Failed to load patient outcomes')
@@ -522,23 +504,18 @@ const loadPatientOutcomes = async () => {
 
 const loadMedicalConditions = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
-    
-    const response = await fetch(`/api/reports/medical-conditions?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      medicalConditions.value = await response.json()
-      await nextTick()
-      renderDiseasePrevalenceChart()
     }
+    
+    if (filters.value.patientId) {
+      filterParams.patient_id = filters.value.patientId
+    }
+    
+    medicalConditions.value = await getMedicalConditions(filterParams)
+    await nextTick()
+    renderDiseasePrevalenceChart()
   } catch (error) {
     console.error('Error loading medical conditions:', error)
     toast.showError('Failed to load medical conditions report')
@@ -804,50 +781,79 @@ const refreshAllReports = async () => {
 
 const exportReport = async (reportType) => {
   try {
-    const params = new URLSearchParams({
-      report_type: reportType,
-      format: 'csv',
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
     if (filters.value.patientId) {
-      params.append('patient_id', filters.value.patientId)
+      filterParams.patient_id = filters.value.patientId
     }
     
-    const response = await fetch(`/api/reports/export?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-      }
-    })
+    const { blob, filename } = await exportPatientReport(reportType, filterParams)
     
-    if (response.ok) {
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${reportType}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast.showSuccess('Report exported successfully')
-    } else {
-      throw new Error('Export failed')
-    }
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    toast.showSuccess('Report exported successfully')
   } catch (error) {
     console.error('Error exporting report:', error)
-    toast.showError('Failed to export report')
+    toast.showError(error.message || 'Failed to export report')
   }
 }
 
-const exportAllReports = () => {
-  const reports = ['patient_health_trends', 'progress_notes_analytics', 'patient_outcomes', 'medical_conditions']
-  
-  reports.forEach((reportType, index) => {
-    setTimeout(() => exportReport(reportType), index * 1000)
-  })
+const exportAllReports = async () => {
+  try {
+    const filterParams = {
+      date_from: filters.value.dateFrom,
+      date_to: filters.value.dateTo
+    }
+    
+    if (filters.value.patientId) {
+      filterParams.patient_id = filters.value.patientId
+    }
+    
+    toast.showInfo('Exporting all reports... This may take a moment.')
+    
+    const results = await exportAllPatientReports(filterParams)
+    
+    let successCount = 0
+    let failureCount = 0
+    
+    results.forEach(result => {
+      if (result.success) {
+        const url = window.URL.createObjectURL(result.blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = result.filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        successCount++
+      } else {
+        failureCount++
+        console.error(`Failed to export ${result.reportType}:`, result.error)
+      }
+    })
+    
+    if (successCount > 0) {
+      toast.showSuccess(`Successfully exported ${successCount} report(s)`)
+    }
+    
+    if (failureCount > 0) {
+      toast.showWarning(`${failureCount} report(s) failed to export`)
+    }
+  } catch (error) {
+    console.error('Error exporting all reports:', error)
+    toast.showError('Failed to export reports')
+  }
 }
 
 // Utility functions

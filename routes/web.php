@@ -304,6 +304,13 @@ Route::middleware('auth:web')->group(function () {
     |--------------------------------------------------------------------------
     */
     Route::prefix('transports')->group(function () {
+        // IMPORTANT: Specific routes MUST come BEFORE dynamic routes with parameters
+        
+        // Dashboard and export routes FIRST (before {transportRequest})
+        Route::get('/dashboard', [TransportRequestController::class, 'dashboard']);
+        Route::get('/export', [TransportRequestController::class, 'export']);
+        Route::get('/my-requests', [TransportRequestController::class, 'myRequests']);
+        
         // Basic CRUD operations
         Route::get('/', [TransportRequestController::class, 'index']);
         Route::post('/', [TransportRequestController::class, 'store']);
@@ -311,15 +318,11 @@ Route::middleware('auth:web')->group(function () {
         Route::put('/{transportRequest}', [TransportRequestController::class, 'update']);
         Route::delete('/{transportRequest}', [TransportRequestController::class, 'destroy']);
         
-        // Transport request actions
+        // Transport request actions (these can come after {transportRequest} because they have additional segments)
         Route::post('/{transportRequest}/assign-driver', [TransportRequestController::class, 'assignDriver']);
         Route::post('/{transportRequest}/start', [TransportRequestController::class, 'start']);
         Route::post('/{transportRequest}/complete', [TransportRequestController::class, 'complete']);
         Route::post('/{transportRequest}/cancel', [TransportRequestController::class, 'cancel']);
-        
-        // Export and dashboard
-        Route::get('/export/csv', [TransportRequestController::class, 'export']);
-        Route::get('/dashboard/stats', [TransportRequestController::class, 'dashboard']);
     });
     
     // User's own transport requests

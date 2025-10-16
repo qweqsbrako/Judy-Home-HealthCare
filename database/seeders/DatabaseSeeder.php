@@ -122,6 +122,9 @@ class DatabaseSeeder extends Seeder
             ScheduleSeeder::class,
             ProgressNoteSeeder::class,
             MedicalAssessmentSeeder::class,
+            DriverSeeder::class,
+            VehicleSeeder::class,
+            TransportRequestSeeder::class,
         ]);
     }
 }

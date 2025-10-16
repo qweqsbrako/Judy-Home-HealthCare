@@ -22,7 +22,7 @@ class TransportRequestController extends Controller
      */
     public function index(Request $request)
     {
-        $query = TransportRequest::with(['patient', 'requestedBy', 'driver']);
+        $query = TransportRequest::with(['patient', 'requestedBy', 'driver.currentVehicle']);
 
         // Apply filters
         if ($request->filled('status')) {
@@ -56,11 +56,56 @@ class TransportRequestController extends Controller
         // Sort by scheduled time
         $query->orderBy('scheduled_time', 'desc');
 
-        $transports = $query->paginate(20);
+        // Get pagination parameter (default 15)
+        $perPage = $request->input('per_page', 15);
+        
+        $transports = $query->paginate($perPage);
+
+        // Transform the data to include nested relationships properly
+        $transformedData = $transports->through(function ($transport) {
+            return [
+                'id' => $transport->id,
+                'patient_id' => $transport->patient_id,
+                'patient_name' => $transport->patient_name,
+                'patient' => $transport->patient,
+                'requested_by_id' => $transport->requested_by_id,
+                'requested_by_name' => $transport->requested_by_name,
+                'requestedBy' => $transport->requestedBy,
+                'driver_id' => $transport->driver_id,
+                'driver_name' => $transport->driver_name,
+                'driver' => $transport->driver,
+                'transport_type' => $transport->transport_type,
+                'priority' => $transport->priority,
+                'status' => $transport->status,
+                'status_label' => $transport->status_label,
+                'priority_label' => $transport->priority_label,
+                'type_label' => $transport->type_label,
+                'scheduled_time' => $transport->scheduled_time,
+                'pickup_location' => $transport->pickup_location,
+                'pickup_address' => $transport->pickup_address,
+                'destination_location' => $transport->destination_location,
+                'destination_address' => $transport->destination_address,
+                'reason' => $transport->reason,
+                'special_requirements' => $transport->special_requirements,
+                'contact_person' => $transport->contact_person,
+                'estimated_cost' => $transport->estimated_cost,
+                'actual_cost' => $transport->actual_cost,
+                'distance_km' => $transport->distance_km,
+                'rating' => $transport->rating,
+                'feedback' => $transport->feedback,
+                'actual_pickup_time' => $transport->actual_pickup_time,
+                'actual_arrival_time' => $transport->actual_arrival_time,
+                'completed_at' => $transport->completed_at,
+                'cancelled_at' => $transport->cancelled_at,
+                'cancellation_reason' => $transport->cancellation_reason,
+                'created_at' => $transport->created_at,
+                'updated_at' => $transport->updated_at,
+            ];
+        });
 
         return response()->json([
             'success' => true,
-            'data' => $transports->items(),
+            'data' => $transformedData->items(),
             'pagination' => [
                 'current_page' => $transports->currentPage(),
                 'last_page' => $transports->lastPage(),
@@ -141,7 +186,7 @@ class TransportRequestController extends Controller
      */
     public function show(TransportRequest $transportRequest)
     {
-        $transportRequest->load(['patient', 'requestedBy', 'driver']);
+        $transportRequest->load(['patient', 'requestedBy', 'driver.currentVehicle']);
 
         return response()->json([
             'success' => true,
@@ -316,44 +361,67 @@ class TransportRequestController extends Controller
      */
     public function dashboard()
     {
-        $today = Carbon::today();
-        $thisWeek = Carbon::now()->startOfWeek();
-        $thisMonth = Carbon::now()->startOfMonth();
+        try {
+            $today = Carbon::today();
+            $thisWeek = Carbon::now()->startOfWeek();
+            $thisMonth = Carbon::now()->startOfMonth();
 
-        $stats = [
-            'total_requests' => TransportRequest::count(),
-            'today_requests' => TransportRequest::whereDate('created_at', $today)->count(),
-            'pending_requests' => TransportRequest::pending()->count(),
-            'active_transports' => TransportRequest::active()->count(),
-            'completed_today' => TransportRequest::completed()->whereDate('completed_at', $today)->count(),
+            $stats = [
+                'total_requests' => TransportRequest::count(),
+                'today_requests' => TransportRequest::whereDate('created_at', $today)->count(),
+                'pending_requests' => TransportRequest::pending()->count(),
+                'active_transports' => TransportRequest::active()->count(),
+                'completed_today' => TransportRequest::completed()->whereDate('completed_at', $today)->count(),
+                
+                'by_status' => TransportRequest::select('status', DB::raw('count(*) as count'))
+                    ->groupBy('status')
+                    ->pluck('count', 'status')
+                    ->toArray(),
+                    
+                'by_priority' => TransportRequest::select('priority', DB::raw('count(*) as count'))
+                    ->groupBy('priority')
+                    ->pluck('count', 'priority')
+                    ->toArray(),
+                    
+                'by_type' => TransportRequest::select('transport_type', DB::raw('count(*) as count'))
+                    ->groupBy('transport_type')
+                    ->pluck('count', 'transport_type')
+                    ->toArray(),
+                    
+                'weekly_trend' => TransportRequest::where('created_at', '>=', $thisWeek)
+                    ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
+                    ->groupBy('date')
+                    ->orderBy('date')
+                    ->get()
+                    ->toArray(),
+                    
+                'average_rating' => round(TransportRequest::whereNotNull('rating')->avg('rating') ?? 0, 2),
+                'total_distance' => round(TransportRequest::sum('distance_km') ?? 0, 2),
+                'total_revenue' => round(TransportRequest::where('status', 'completed')->sum('actual_cost') ?? 0, 2)
+            ];
+
+            \Log::info('Transport Dashboard Stats:', $stats);
+
+            return response()->json([
+                'success' => true,
+                'data' => $stats
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching transport dashboard stats: ' . $e->getMessage());
             
-            'by_status' => TransportRequest::select('status', DB::raw('count(*) as count'))
-                ->groupBy('status')
-                ->pluck('count', 'status'),
-                
-            'by_priority' => TransportRequest::select('priority', DB::raw('count(*) as count'))
-                ->groupBy('priority')
-                ->pluck('count', 'priority'),
-                
-            'by_type' => TransportRequest::select('transport_type', DB::raw('count(*) as count'))
-                ->groupBy('transport_type')
-                ->pluck('count', 'transport_type'),
-                
-            'weekly_trend' => TransportRequest::where('created_at', '>=', $thisWeek)
-                ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
-                ->groupBy('date')
-                ->orderBy('date')
-                ->get(),
-                
-            'average_rating' => TransportRequest::whereNotNull('rating')->avg('rating'),
-            'total_distance' => TransportRequest::sum('distance_km'),
-            'total_revenue' => TransportRequest::where('status', 'completed')->sum('actual_cost')
-        ];
-
-        return response()->json([
-            'success' => true,
-            'data' => $stats
-        ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch statistics',
+                'error' => $e->getMessage(),
+                'data' => [
+                    'total_requests' => 0,
+                    'today_requests' => 0,
+                    'pending_requests' => 0,
+                    'active_transports' => 0,
+                    'completed_today' => 0,
+                ]
+            ], 500);
+        }
     }
 
     /**

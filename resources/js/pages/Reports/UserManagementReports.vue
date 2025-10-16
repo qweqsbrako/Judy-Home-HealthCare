@@ -9,7 +9,7 @@
             <p>Analytics and insights for user activity, roles, and verification status</p>
           </div>
           <div class="page-header-actions">
-            <button @click="exportAllReports" class="btn btn-secondary">
+            <button @click="exportAllReportsHandler" class="btn btn-secondary">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -70,7 +70,7 @@
           <div class="report-card">
             <div class="report-header">
               <h3>User Activity Report</h3>
-              <button @click="exportReport('user_activity')" class="btn btn-sm btn-secondary">
+              <button @click="exportReportHandler('user_activity')" class="btn btn-sm btn-secondary">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
                 </svg>
@@ -146,7 +146,7 @@
           <div class="report-card">
             <div class="report-header">
               <h3>Role Distribution Report</h3>
-              <button @click="exportReport('role_distribution')" class="btn btn-sm btn-secondary">
+              <button @click="exportReportHandler('role_distribution')" class="btn btn-sm btn-secondary">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
                 </svg>
@@ -220,7 +220,7 @@
           <div class="report-card">
             <div class="report-header">
               <h3>Verification Status Report</h3>
-              <button @click="exportReport('verification_status')" class="btn btn-sm btn-secondary">
+              <button @click="exportReportHandler('verification_status')" class="btn btn-sm btn-secondary">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
                 </svg>
@@ -286,10 +286,10 @@
                       <td>{{ formatTimeAgo(user.created_at) }}</td>
                       <td>
                         <div class="button-group">
-                          <button @click="verifyUser(user.id)" class="btn btn-sm btn-success">
+                          <button @click="verifyUserHandler(user.id)" class="btn btn-sm btn-success">
                             Verify
                           </button>
-                          <button @click="rejectUser(user.id)" class="btn btn-sm btn-danger">
+                          <button @click="rejectUserHandler(user.id)" class="btn btn-sm btn-danger">
                             Reject
                           </button>
                         </div>
@@ -349,6 +349,7 @@ import { ref, computed, onMounted, nextTick, inject } from 'vue'
 import MainLayout from '../../layout/MainLayout.vue'
 import Toast from '../../common/components/Toast.vue'
 import Chart from 'chart.js/auto'
+import * as reportsService from '../../services/reportsService'
 
 const toast = inject('toast')
 
@@ -395,25 +396,18 @@ const groupedRoleStatus = computed(() => {
 // Methods
 const loadUserActivityReport = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo,
       role: filters.value.role
-    })
-    
-    const response = await fetch(`/api/reports/user-activity?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      userActivityData.value = await response.json()
-      await nextTick()
-      renderRegistrationsChart()
-      renderLoginFrequencyChart()
     }
+    
+    const response = await reportsService.getUserActivityReport(filterParams)
+    userActivityData.value = response.data || response
+    
+    await nextTick()
+    renderRegistrationsChart()
+    renderLoginFrequencyChart()
   } catch (error) {
     console.error('Error loading user activity report:', error)
     toast.showError('Failed to load user activity report')
@@ -422,18 +416,11 @@ const loadUserActivityReport = async () => {
 
 const loadRoleDistributionReport = async () => {
   try {
-    const response = await fetch('/api/reports/role-distribution', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    const response = await reportsService.getRoleDistributionReport()
+    roleDistributionData.value = response.data || response
     
-    if (response.ok) {
-      roleDistributionData.value = await response.json()
-      await nextTick()
-      renderRoleDistributionChart()
-    }
+    await nextTick()
+    renderRoleDistributionChart()
   } catch (error) {
     console.error('Error loading role distribution report:', error)
     toast.showError('Failed to load role distribution report')
@@ -442,23 +429,16 @@ const loadRoleDistributionReport = async () => {
 
 const loadVerificationStatusReport = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
-    
-    const response = await fetch(`/api/reports/verification-status?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      verificationStatusData.value = await response.json()
-      await nextTick()
-      renderVerificationTrendsChart()
     }
+    
+    const response = await reportsService.getVerificationStatusReport(filterParams)
+    verificationStatusData.value = response.data || response
+    
+    await nextTick()
+    renderVerificationTrendsChart()
   } catch (error) {
     console.error('Error loading verification status report:', error)
     toast.showError('Failed to load verification status report')
@@ -664,91 +644,99 @@ const refreshAllReports = async () => {
   }
 }
 
-const exportReport = async (reportType) => {
+const exportReportHandler = async (reportType) => {
   try {
-    const params = new URLSearchParams({
-      report_type: reportType,
-      format: 'csv',
+    toast.showInfo('Preparing export...')
+    
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo,
       role: filters.value.role
-    })
-    
-    const response = await fetch(`/api/reports/export?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-      }
-    })
-    
-    if (response.ok) {
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${reportType}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast.showSuccess('Report exported successfully')
-    } else {
-      throw new Error('Export failed')
     }
+    
+    const { blob, filename } = await reportsService.exportReport(reportType, filterParams)
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    toast.showSuccess('Report exported successfully')
   } catch (error) {
     console.error('Error exporting report:', error)
-    toast.showError('Failed to export report')
+    toast.showError(error.message || 'Failed to export report')
   }
 }
 
-const exportAllReports = () => {
-  // Export all three reports
-  ['user_activity', 'role_distribution', 'verification_status'].forEach(reportType => {
-    setTimeout(() => exportReport(reportType), 1000) // Stagger exports
-  })
-}
-
-const verifyUser = async (userId) => {
+const exportAllReportsHandler = async () => {
   try {
-    const response = await fetch(`/api/users/${userId}/verify`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
+    toast.showInfo('Exporting all reports...')
+    
+    const filterParams = {
+      date_from: filters.value.dateFrom,
+      date_to: filters.value.dateTo,
+      role: filters.value.role
+    }
+    
+    const results = await reportsService.exportAllReports(filterParams)
+    
+    // Download all successful exports
+    let successCount = 0
+    let failCount = 0
+    
+    results.forEach(result => {
+      if (result.success) {
+        const url = window.URL.createObjectURL(result.blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = result.filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        successCount++
+      } else {
+        console.error(`Failed to export ${result.reportType}:`, result.error)
+        failCount++
       }
     })
     
-    if (response.ok) {
-      toast.showSuccess('User verified successfully')
-      await loadVerificationStatusReport()
+    if (successCount > 0 && failCount === 0) {
+      toast.showSuccess(`All ${successCount} reports exported successfully`)
+    } else if (successCount > 0 && failCount > 0) {
+      toast.showWarning(`${successCount} reports exported, ${failCount} failed`)
     } else {
-      throw new Error('Verification failed')
+      toast.showError('Failed to export reports')
     }
+  } catch (error) {
+    console.error('Error exporting all reports:', error)
+    toast.showError('Failed to export all reports')
+  }
+}
+
+const verifyUserHandler = async (userId) => {
+  try {
+    await reportsService.verifyUser(userId)
+    toast.showSuccess('User verified successfully')
+    await loadVerificationStatusReport()
   } catch (error) {
     console.error('Error verifying user:', error)
-    toast.showError('Failed to verify user')
+    toast.showError(error.message || 'Failed to verify user')
   }
 }
 
-const rejectUser = async (userId) => {
+const rejectUserHandler = async (userId) => {
   try {
-    const response = await fetch(`/api/users/${userId}/reject`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      toast.showSuccess('User rejected successfully')
-      await loadVerificationStatusReport()
-    } else {
-      throw new Error('Rejection failed')
-    }
+    await reportsService.rejectUser(userId)
+    toast.showSuccess('User rejected successfully')
+    await loadVerificationStatusReport()
   } catch (error) {
     console.error('Error rejecting user:', error)
-    toast.showError('Failed to reject user')
+    toast.showError(error.message || 'Failed to reject user')
   }
 }
 
@@ -886,7 +874,7 @@ onMounted(() => {
 
 .report-header {
   display: flex;
-  justify-content: between;
+  justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
   border-bottom: 1px solid #e5e7eb;

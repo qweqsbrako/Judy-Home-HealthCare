@@ -276,11 +276,11 @@ class ReportController extends Controller
 
         // Care complexity analysis
         $complexityAnalysis = CarePlan::selectRaw('
-            complexity_level,
+            priority as complexity_level,
             COUNT(*) as count,
             AVG(DATEDIFF(COALESCE(end_date, NOW()), start_date)) as avg_duration_days
         ')
-        ->groupBy('complexity_level')
+        ->groupBy('priority')
         ->get();
 
         // Patients by care type
@@ -336,15 +336,6 @@ class ReportController extends Controller
         ->groupBy('care_type')
         ->get();
 
-        // Outcomes tracking
-        $outcomesTracking = CarePlan::selectRaw('
-            care_type,
-            completion_percentage,
-            COUNT(*) as count
-        ')
-        ->whereNotNull('outcomes')
-        ->groupBy('care_type', 'completion_percentage')
-        ->get();
 
         // Doctor performance
         $doctorPerformance = CarePlan::selectRaw('
@@ -361,7 +352,6 @@ class ReportController extends Controller
         return response()->json([
             'average_duration' => $averageDuration,
             'success_rates' => $successRates,
-            'outcomes_tracking' => $outcomesTracking,
             'doctor_performance' => $doctorPerformance
         ]);
     }
