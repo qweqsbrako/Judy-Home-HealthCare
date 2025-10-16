@@ -23,6 +23,14 @@ Route::get('/health', function () {
     ]);
 });
 
+Route::prefix('auth')->group(function () {
+    Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('auth.forgot-password');
+    Route::post('/verify-reset-otp', [AuthController::class, 'verifyResetOtp'])->name('auth.verify-reset-otp');
+    Route::post('/resend-reset-otp', [AuthController::class, 'resendResetOtp'])->name('auth.resend-reset-otp');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->name('auth.reset-password');
+});
+
 // Mobile API Routes (Token-based with Sanctum)
 Route::middleware('auth:sanctum')->prefix('mobile')->group(function () {
     
