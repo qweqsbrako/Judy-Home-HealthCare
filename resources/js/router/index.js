@@ -118,6 +118,13 @@ const routes = [
     meta: { requiresAuth: true, roles: ['nurse', 'doctor', 'patient', 'admin', 'superadmin'] }
   },
 
+  {
+    path: '/care/patient/requests',
+    name: 'Care Request',
+    component: () => import('../pages/CareManagement/CareRequests.vue'),
+    meta: { requiresAuth: true, roles: ['nurse', 'doctor', 'patient', 'admin', 'superadmin'] }
+  },
+
   // Billing & Payment Routes
   {
     path: '/billing/my-bills',

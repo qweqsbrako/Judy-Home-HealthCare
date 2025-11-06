@@ -60,9 +60,9 @@
               <label>Started:</label>
               <span>{{ formatTime(currentSession.start_time) }}</span>
             </div>
-            <div class="detail-item" v-if="currentSession.clock_in_location">
+            <div class="detail-item" v-if="currentSession.clock_in_location_name || currentSession.clock_in_location">
               <label>Location:</label>
-              <span>{{ currentSession.clock_in_location }}</span>
+              <span>{{ currentSession.clock_in_location_name || currentSession.clock_in_location }}</span>
             </div>
           </div>
 

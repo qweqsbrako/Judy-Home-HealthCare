@@ -15,11 +15,11 @@
         <div class="auth-branding-content">
           <!-- Logo -->
           <div class="auth-logo-container">
-            <img 
+            <!-- <img 
               src="https://www.mnotify.com/assets/mnotify_04_black-BzCtWTKE.webp" 
               alt="Judy Home Care" 
               class="auth-logo"
-            >
+            > -->
           </div>
           
           <!-- Branding Text -->

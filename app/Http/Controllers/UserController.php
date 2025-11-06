@@ -429,9 +429,26 @@ class UserController extends Controller
             );
 
             if ($success) {
+                // Send approval notification to user (Email + SMS)
+                try {
+                    $user->notify(new \App\Notifications\AccountApprovedNotification());
+                    
+                    \Log::info('Account approval notification sent', [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'phone' => $user->phone
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send approval notification', [
+                        'user_id' => $user->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    // Don't fail the verification if notification fails
+                }
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'User verified successfully',
+                    'message' => 'User verified successfully. Approval notification sent via email and SMS.',
                     'data' => new UserResource($user->fresh(['roleModel', 'verifier']))
                 ]);
             }

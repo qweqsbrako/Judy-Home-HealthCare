@@ -16,14 +16,22 @@ class PatientFeedback extends Model
     protected $fillable = [
         'patient_id',
         'nurse_id',
+        'schedule_id',
         'rating',
         'feedback_text',
-        'would_recommend'
+        'would_recommend',
+        'care_date',
+        'status',
+        'response_text',
+        'responded_by',
+        'responded_at',
     ];
 
     protected $casts = [
         'rating' => 'integer',
         'would_recommend' => 'boolean',
+        'care_date' => 'date',
+        'responded_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime'
     ];
@@ -47,11 +55,11 @@ class PatientFeedback extends Model
     }
 
     /**
-     * Get the care session this feedback relates to
+     * Get the schedule this feedback relates to
      */
-    public function careSession(): BelongsTo
+    public function schedule(): BelongsTo
     {
-        return $this->belongsTo(CareSession::class, 'care_session_id');
+        return $this->belongsTo(Schedule::class, 'schedule_id');
     }
 
     /**

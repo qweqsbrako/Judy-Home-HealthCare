@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Carbon\Carbon;
+use App\Services\GeocodeService;
 
 class TimeTracking extends Model
 {
@@ -57,7 +58,12 @@ class TimeTracking extends Model
         'clock_out_longitude' => 'decimal:8',
     ];
 
-    protected $appends = ['formatted_duration'];
+    protected $appends = [
+        'formatted_duration',
+        'session_type_display',
+        'clock_in_location_name',
+        'clock_out_location_name'
+    ];
 
 
     // Relationships
@@ -356,5 +362,41 @@ class TimeTracking extends Model
                 ? round($sessions->avg('total_duration_minutes'), 2) 
                 : 0
         ];
+    }
+
+      /**
+     * Get human-readable clock in location
+     *
+     * @return string|null
+     */
+    public function getClockInLocationNameAttribute(): ?string
+    {
+        if ($this->clock_in_latitude && $this->clock_in_longitude) {
+            $geocodeService = app(GeocodeService::class);
+            return $geocodeService->getShortAddressFromCoordinates(
+                $this->clock_in_latitude,
+                $this->clock_in_longitude
+            );
+        }
+
+        return $this->clock_in_location;
+    }
+
+    /**
+     * Get human-readable clock out location
+     *
+     * @return string|null
+     */
+    public function getClockOutLocationNameAttribute(): ?string
+    {
+        if ($this->clock_out_latitude && $this->clock_out_longitude) {
+            $geocodeService = app(GeocodeService::class);
+            return $geocodeService->getShortAddressFromCoordinates(
+                $this->clock_out_latitude,
+                $this->clock_out_longitude
+            );
+        }
+
+        return $this->clock_out_location;
     }
 }

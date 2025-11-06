@@ -23,6 +23,8 @@ use App\Http\Controllers\QualityReportingController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\AdminCareRequestController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -526,6 +528,27 @@ Route::middleware(['auth:web', 'role:admin,superadmin'])->group(function () {
         Route::get('/{permission}', [PermissionController::class, 'show'])->name('permissions.show');
         Route::get('/{permission}/roles', [PermissionController::class, 'getRoles'])->name('permissions.get-roles');
     });
+});
+
+
+Route::middleware(['auth:web', 'role:admin,superadmin'])->prefix('admin')->group(function () {
+    
+    // Care Request Management
+    Route::prefix('care-requests')->group(function () {
+        // List and stats
+        Route::get('/', [AdminCareRequestController::class, 'index']);
+        Route::get('/statistics', [AdminCareRequestController::class, 'getStatistics']);
+        Route::get('/nurses', [AdminCareRequestController::class, 'getAvailableNurses']);
+        
+        // Actions
+        Route::post('/{id}/assign-nurse', [AdminCareRequestController::class, 'assignNurse']);
+        Route::post('/{id}/schedule-assessment', [AdminCareRequestController::class, 'scheduleAssessment']);
+        Route::post('/{id}/complete-assessment', [AdminCareRequestController::class, 'completeAssessment']);
+        Route::post('/{id}/issue-care-cost', [AdminCareRequestController::class, 'issueCareCost']);
+        Route::post('/{id}/start-care', [AdminCareRequestController::class, 'startCare']);
+        Route::post('/{id}/reject', [AdminCareRequestController::class, 'reject']);
+    });
+    
 });
 
 /*

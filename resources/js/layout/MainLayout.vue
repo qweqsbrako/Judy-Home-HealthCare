@@ -83,6 +83,8 @@
               </li>
               <li><router-link to="/care/patient/daily-progress" class="nav-dropdown-link">Daily Progress</router-link></li>
               <li><router-link to="/care/patient/assessment" class="nav-dropdown-link">Patient Initial Assessment</router-link></li>
+              <li><router-link to="/care/patient/requests" class="nav-dropdown-link">Care Requests</router-link></li>
+
             </ul>
           </li>
 

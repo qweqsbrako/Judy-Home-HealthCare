@@ -64,6 +64,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'locale',
         'password_reset_token', 
         'password_reset_expires',
+        'fcm_token',
+        'fcm_token_updated_at'
     ];
 
     /**
@@ -101,6 +103,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'current_medications' => 'array',
         'preferences' => 'array',
         'years_experience' => 'integer',
+        'fcm_token_updated_at' => 'datetime',
     ];
 
     /**
@@ -622,5 +625,41 @@ class User extends Authenticatable implements MustVerifyEmail
     public function latestProgressNote()
     {
         return $this->hasOne(ProgressNote::class, 'patient_id')->latest('visit_date');
+    }
+
+    /**
+     * Get feedback received (for nurses)
+     */
+    public function feedbackReceived()
+    {
+        return $this->hasMany(PatientFeedback::class, 'nurse_id');
+    }
+
+    /**
+     * Get feedback given (for patients)
+     */
+    public function feedbackGiven()
+    {
+        return $this->hasMany(PatientFeedback::class, 'patient_id');
+    }
+
+    // Add relationship
+    public function notificationLogs()
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
+    public function notificationPreference()
+    {
+        return $this->hasOne(NotificationPreference::class);
+    }
+
+    // Helper to update FCM token
+    public function updateFcmToken(string $token): void
+    {
+        $this->update([
+            'fcm_token' => $token,
+            'fcm_token_updated_at' => now(),
+        ]);
     }
 }

@@ -27,6 +27,18 @@ class Kernel extends ConsoleKernel
             ->timezone('Africa/Accra')
             ->withoutOverlapping()
             ->onOneServer();
+
+        // Daily reminder (24 hours before)
+        $schedule->command('appointments:send-reminders --type=daily')
+            ->dailyAt('09:00');
+        
+        // Hourly check (2 hours before)
+        $schedule->command('appointments:send-reminders --type=hourly')
+            ->hourly();
+        
+        // Urgent reminder (30 minutes before)
+        $schedule->command('appointments:send-reminders --type=urgent')
+            ->everyFifteenMinutes();
     }
 
     /**

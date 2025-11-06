@@ -194,7 +194,7 @@
               <h3>Change Password</h3>
               <p>Update your password to keep your account secure</p>
             </div>
-            <form @submit.prevent="updatePassword" class="settings-card-body">
+            <form @submit.prevent="updatePasswordHandler" class="settings-card-body">
               <div class="form-grid">
                 <div class="form-group form-grid-full">
                   <label>Current Password</label>
@@ -337,7 +337,7 @@
               <h3>Professional Information</h3>
               <p>Manage your professional credentials and experience</p>
             </div>
-            <form @submit.prevent="updateProfessionalInfo" class="settings-card-body">
+            <form @submit.prevent="updateProfessionalInfoHandler" class="settings-card-body">
               <div class="form-grid">
                 <div class="form-group">
                   <label>License Number</label>
@@ -396,7 +396,7 @@
           </button>
         </div>
 
-        <form @submit.prevent="enableTwoFactor">
+        <form @submit.prevent="enableTwoFactorHandler">
           <div class="modal-body">
             <div class="form-group">
               <label>Choose Verification Method</label>
@@ -449,7 +449,7 @@
           <button @click="showDisableTwoFactorModal = false" class="btn btn-secondary">
             Cancel
           </button>
-          <button @click="disableTwoFactor" :disabled="isDisablingTwoFactor" class="btn btn-danger">
+          <button @click="disableTwoFactorHandler" :disabled="isDisablingTwoFactor" class="btn btn-danger">
             <div v-if="isDisablingTwoFactor" class="spinner spinner-sm"></div>
             Disable 2FA
           </button>
@@ -468,6 +468,15 @@ import { useRouter } from 'vue-router'
 import MainLayout from '../../layout/MainLayout.vue'
 import Toast from '../../common/components/Toast.vue'
 import SearchableSelect from '../../common/components/SearchableSelect.vue'
+import { 
+  getProfile, 
+  updateProfile, 
+  updatePassword,
+  updateProfessionalInfo,
+  updateAvatar,
+  enableTwoFactor,
+  disableTwoFactor
+} from '../../services/profileService'
 
 const router = useRouter()
 const toast = inject('toast')
@@ -544,46 +553,35 @@ const professionalForm = reactive({
 // Methods
 const loadUserData = async () => {
   try {
-    const response = await fetch('/api/profile', {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
+    const data = await getProfile()
+    
+    // Update user object
+    Object.assign(user.value, data)
+    
+    // Set avatar URL
+    user.value.avatar_url = data.avatar || `https://ui-avatars.com/api/?name=${data.first_name}+${data.last_name}&color=667eea&background=f8f9fa&size=200&font-size=0.6`
+    
+    // Populate forms
+    Object.assign(generalForm, {
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+      phone: data.phone,
+      date_of_birth: data.date_of_birth ? data.date_of_birth.split('T')[0] : '',
+      gender: data.gender || '',
+      ghana_card_number: data.ghana_card_number,
+      emergency_contact_name: data.emergency_contact_name || '',
+      emergency_contact_phone: data.emergency_contact_phone || ''
     })
-
-    if (response.ok) {
-      const data = await response.json()
-      
-      // Update user object
-      Object.assign(user.value, data)
-      
-      // Set avatar URL
-      user.value.avatar_url = data.avatar || `https://ui-avatars.com/api/?name=${data.first_name}+${data.last_name}&color=667eea&background=f8f9fa&size=200&font-size=0.6`
-      
-      // Populate forms
-      Object.assign(generalForm, {
-        first_name: data.first_name,
-        last_name: data.last_name,
-        email: data.email,
-        phone: data.phone,
-        date_of_birth: data.date_of_birth ? data.date_of_birth.split('T')[0] : '',
-        gender: data.gender || '',
-        ghana_card_number: data.ghana_card_number,
-        emergency_contact_name: data.emergency_contact_name || '',
-        emergency_contact_phone: data.emergency_contact_phone || ''
-      })
-      
-      Object.assign(professionalForm, {
-        license_number: data.license_number || '',
-        specialization: data.specialization || '',
-        years_experience: data.years_experience || 0
-      })
-    } else {
-      toast.showError('Failed to load profile data')
-    }
+    
+    Object.assign(professionalForm, {
+      license_number: data.license_number || '',
+      specialization: data.specialization || '',
+      years_experience: data.years_experience || 0
+    })
   } catch (error) {
     console.error('Error loading user data:', error)
-    toast.showError('An error occurred while loading your profile')
+    toast.showError(error.message || 'An error occurred while loading your profile')
   }
 }
 
@@ -591,31 +589,18 @@ const updateGeneralInfo = async () => {
   isSaving.value = true
   
   try {
-    const response = await fetch('/api/profile/update', {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(generalForm)
-    })
-    
-    if (response.ok) {
-      await loadUserData()
-      toast.showSuccess('Profile updated successfully!')
-    } else {
-      const error = await response.json()
-      toast.showError(error.message || 'Failed to update profile')
-    }
+    await updateProfile(generalForm)
+    await loadUserData()
+    toast.showSuccess('Profile updated successfully!')
   } catch (error) {
     console.error('Error updating profile:', error)
-    toast.showError('An error occurred while updating your profile')
+    toast.showError(error.message || 'Failed to update profile')
+  } finally {
+    isSaving.value = false
   }
-  
-  isSaving.value = false
 }
 
-const updatePassword = async () => {
+const updatePasswordHandler = async () => {
   if (passwordForm.new_password !== passwordForm.new_password_confirmation) {
     toast.showError('New passwords do not match')
     return
@@ -624,59 +609,33 @@ const updatePassword = async () => {
   isSavingPassword.value = true
   
   try {
-    const response = await fetch('/api/profile/update-password', {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(passwordForm)
-    })
-    
-    if (response.ok) {
-      toast.showSuccess('Password updated successfully!')
-      // Clear form
-      passwordForm.current_password = ''
-      passwordForm.new_password = ''
-      passwordForm.new_password_confirmation = ''
-    } else {
-      const error = await response.json()
-      toast.showError(error.message || 'Failed to update password')
-    }
+    await updatePassword(passwordForm)
+    toast.showSuccess('Password updated successfully!')
+    // Clear form
+    passwordForm.current_password = ''
+    passwordForm.new_password = ''
+    passwordForm.new_password_confirmation = ''
   } catch (error) {
     console.error('Error updating password:', error)
-    toast.showError('An error occurred while updating your password')
+    toast.showError(error.message || 'Failed to update password')
+  } finally {
+    isSavingPassword.value = false
   }
-  
-  isSavingPassword.value = false
 }
 
-const updateProfessionalInfo = async () => {
+const updateProfessionalInfoHandler = async () => {
   isSavingProfessional.value = true
   
   try {
-    const response = await fetch('/api/profile/update-professional', {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(professionalForm)
-    })
-    
-    if (response.ok) {
-      await loadUserData()
-      toast.showSuccess('Professional information updated successfully!')
-    } else {
-      const error = await response.json()
-      toast.showError(error.message || 'Failed to update professional information')
-    }
+    await updateProfessionalInfo(professionalForm)
+    await loadUserData()
+    toast.showSuccess('Professional information updated successfully!')
   } catch (error) {
     console.error('Error updating professional info:', error)
-    toast.showError('An error occurred while updating your professional information')
+    toast.showError(error.message || 'Failed to update professional information')
+  } finally {
+    isSavingProfessional.value = false
   }
-  
-  isSavingProfessional.value = false
 }
 
 const handleAvatarUpload = async (event) => {
@@ -696,85 +655,46 @@ const handleAvatarUpload = async (event) => {
     return
   }
   
-  const formData = new FormData()
-  formData.append('avatar', file)
-  
   try {
-    const response = await fetch('/api/profile/update-avatar', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-      },
-      body: formData
-    })
-    
-    if (response.ok) {
-      await loadUserData()
-      toast.showSuccess('Profile picture updated successfully!')
-    } else {
-      toast.showError('Failed to update profile picture')
-    }
+    await updateAvatar(file)
+    await loadUserData()
+    toast.showSuccess('Profile picture updated successfully!')
   } catch (error) {
     console.error('Error uploading avatar:', error)
-    toast.showError('An error occurred while uploading your profile picture')
+    toast.showError(error.message || 'An error occurred while uploading your profile picture')
   }
 }
 
-const enableTwoFactor = async () => {
+const enableTwoFactorHandler = async () => {
   isEnablingTwoFactor.value = true
   
   try {
-    const response = await fetch('/api/profile/enable-2fa', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ method: twoFactorMethod.value })
-    })
-    
-    if (response.ok) {
-      await loadUserData()
-      showEnableTwoFactorModal.value = false
-      toast.showSuccess('Two-factor authentication enabled successfully!')
-    } else {
-      const error = await response.json()
-      toast.showError(error.message || 'Failed to enable two-factor authentication')
-    }
+    await enableTwoFactor({ method: twoFactorMethod.value })
+    await loadUserData()
+    showEnableTwoFactorModal.value = false
+    toast.showSuccess('Two-factor authentication enabled successfully!')
   } catch (error) {
     console.error('Error enabling 2FA:', error)
-    toast.showError('An error occurred while enabling two-factor authentication')
+    toast.showError(error.message || 'Failed to enable two-factor authentication')
+  } finally {
+    isEnablingTwoFactor.value = false
   }
-  
-  isEnablingTwoFactor.value = false
 }
 
-const disableTwoFactor = async () => {
+const disableTwoFactorHandler = async () => {
   isDisablingTwoFactor.value = true
   
   try {
-    const response = await fetch('/api/profile/disable-2fa', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      await loadUserData()
-      showDisableTwoFactorModal.value = false
-      toast.showSuccess('Two-factor authentication disabled')
-    } else {
-      const error = await response.json()
-      toast.showError(error.message || 'Failed to disable two-factor authentication')
-    }
+    await disableTwoFactor()
+    await loadUserData()
+    showDisableTwoFactorModal.value = false
+    toast.showSuccess('Two-factor authentication disabled')
   } catch (error) {
     console.error('Error disabling 2FA:', error)
-    toast.showError('An error occurred while disabling two-factor authentication')
+    toast.showError(error.message || 'Failed to disable two-factor authentication')
+  } finally {
+    isDisablingTwoFactor.value = false
   }
-  
-  isDisablingTwoFactor.value = false
 }
 
 // Utility functions
@@ -825,8 +745,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Previous styles remain the same... */
-/* Just adding the styles that were already there */
 .settings-page {
   min-height: 100vh;
   background: #f8f9fa;
@@ -1122,6 +1040,204 @@ onMounted(() => {
   font-size: 0.875rem;
 }
 
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+}
+
+.spinner {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  animation: spin 0.6s linear infinite;
+}
+
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.badge {
+  display: inline-flex;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-success {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-primary {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-secondary {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal {
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  max-width: 100%;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-sm {
+  max-width: 500px;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header-danger {
+  background: #fef2f2;
+  border-bottom-color: #fecaca;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.modal-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.modal-icon-danger {
+  color: #dc2626;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-body p {
+  color: #374151;
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  padding: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
 @media (max-width: 768px) {
   .profile-picture-section {
     flex-direction: column;
@@ -1146,6 +1262,14 @@ onMounted(() => {
   }
 
   .form-actions button {
+    width: 100%;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions button {
     width: 100%;
   }
 }

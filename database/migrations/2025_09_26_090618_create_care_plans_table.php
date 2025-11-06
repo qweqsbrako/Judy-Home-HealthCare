@@ -49,13 +49,14 @@ return new class extends Migration
             $table->enum('frequency', [
                 'once_daily',
                 'twice_daily',
-                'three_times_daily',
-                'every_12_hours',
-                'every_8_hours',
-                'every_6_hours',
-                'every_4_hours',
+                // 'three_times_daily',
+                // 'every_12_hours',
+                // 'every_8_hours',
+                // 'every_6_hours',
+                // 'every_4_hours',
                 'weekly',
                 'twice_weekly',
+                'monthly',
                 'as_needed',
                 'custom'
             ]);

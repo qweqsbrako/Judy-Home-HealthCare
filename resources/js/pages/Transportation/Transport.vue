@@ -1685,9 +1685,7 @@ onUnmounted(() => {
   overflow: visible;
 }
 
-.table-wrapper {
-  overflow-x: auto;
-}
+
 
 .modern-table {
   width: 100%;

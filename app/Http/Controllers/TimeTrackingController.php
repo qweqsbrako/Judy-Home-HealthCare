@@ -228,6 +228,22 @@ class TimeTrackingController extends Controller
             'device_info' => 'nullable|string|max:255',
         ]);
 
+        // If coordinates provided, get location name from Google Geocoding API
+        if (isset($validated['latitude']) && isset($validated['longitude'])) {
+            $geocodeService = app(\App\Services\GeocodeService::class);
+            $locationName = $geocodeService->getShortAddressFromCoordinates(
+                $validated['latitude'],
+                $validated['longitude']
+            );
+            
+            if ($locationName) {
+                $validated['location'] = $locationName;
+            } else {
+                // Fallback to coordinates if geocoding fails
+                $validated['location'] = "{$validated['latitude']}, {$validated['longitude']}";
+            }
+        }
+
         $success = $timeTracking->clockIn($validated);
 
         if (!$success) {
@@ -285,6 +301,22 @@ class TimeTrackingController extends Controller
             'work_notes' => 'nullable|string|max:1000',
             'activities_performed' => 'nullable|array',
         ]);
+
+        // If coordinates provided, get location name from Google Geocoding API
+        if (isset($validated['latitude']) && isset($validated['longitude'])) {
+            $geocodeService = app(\App\Services\GeocodeService::class);
+            $locationName = $geocodeService->getShortAddressFromCoordinates(
+                $validated['latitude'],
+                $validated['longitude']
+            );
+            
+            if ($locationName) {
+                $validated['location'] = $locationName;
+            } else {
+                // Fallback to coordinates if geocoding fails
+                $validated['location'] = "{$validated['latitude']}, {$validated['longitude']}";
+            }
+        }
 
         $success = $timeTracking->clockOut($validated);
 

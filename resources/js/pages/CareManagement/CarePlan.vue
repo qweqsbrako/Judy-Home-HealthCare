@@ -166,9 +166,16 @@
                 
                 <td>
                   <div class="contact-cell">
-                    <div class="contact-primary">Dr. {{ plan.doctor.first_name }} {{ plan.doctor.last_name }}</div>
-                    <div class="contact-secondary">{{ formatSpecialization(plan.doctor.specialization) }}</div>
-                  </div>
+                      <!-- Check if doctor exists -->
+                      <template v-if="plan.doctor">
+                        <div class="contact-primary">Dr. {{ plan.doctor.first_name }} {{ plan.doctor.last_name }}</div>
+                        <div class="contact-secondary">{{ formatSpecialization(plan.doctor.specialization) }}</div>
+                      </template>
+                      <template v-else>
+                        <div class="contact-primary" style="color: #94a3b8; font-style: italic;">No doctor assigned</div>
+                        <div class="contact-secondary">—</div>
+                      </template>
+                    </div>
                 </td>
                 
                 <td>
@@ -596,13 +603,21 @@
                 <div class="details-group">
                   <h4 class="details-header">Care Team</h4>
                   <div class="details-grid-view">
-                    <div class="detail-item-view">
+                    <!-- Only show doctor section if doctor exists -->
+                    <div v-if="selectedPlan.doctor" class="detail-item-view">
                       <label>Supervising Doctor</label>
                       <p>Dr. {{ selectedPlan.doctor.first_name }} {{ selectedPlan.doctor.last_name }}</p>
                       <p v-if="selectedPlan.doctor.specialization" style="font-size: 12px; color: #94a3b8;">
                         {{ formatSpecialization(selectedPlan.doctor.specialization) }}
                       </p>
                     </div>
+                    
+                    <!-- Optional: Show a message when no doctor is assigned -->
+                    <div v-else class="detail-item-view">
+                      <label>Supervising Doctor</label>
+                      <p style="color: #94a3b8; font-style: italic;">Not assigned</p>
+                    </div>
+                    
                     <div v-if="selectedPlan.primary_nurse" class="detail-item-view">
                       <label>Primary Nurse</label>
                       <p>{{ selectedPlan.primary_nurse.first_name }} {{ selectedPlan.primary_nurse.last_name }}</p>
@@ -610,6 +625,7 @@
                         {{ selectedPlan.primary_nurse.years_experience || 0 }} years experience
                       </p>
                     </div>
+                    
                     <div v-if="selectedPlan.secondary_nurse" class="detail-item-view">
                       <label>Secondary Nurse</label>
                       <p>{{ selectedPlan.secondary_nurse.first_name }} {{ selectedPlan.secondary_nurse.last_name }}</p>

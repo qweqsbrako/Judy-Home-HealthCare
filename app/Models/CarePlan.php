@@ -32,6 +32,7 @@ class CarePlan extends Model
         'approved_at',
         'completion_percentage',
         'assignment_notes',
+        'completed_tasks',
     ];
 
     protected $casts = [
@@ -40,6 +41,7 @@ class CarePlan extends Model
         'care_tasks' => 'array',
         'approved_at' => 'datetime',
         'completion_percentage' => 'integer',
+        'completed_tasks' => 'array',
     ];
 
     // Relationships

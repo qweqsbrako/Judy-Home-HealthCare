@@ -12,7 +12,6 @@ use Log;
 use App\Services\SmsService; 
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-
 class Schedule extends Model
 {
     use HasFactory, SoftDeletes;
@@ -39,8 +38,6 @@ class Schedule extends Model
 
     protected $casts = [
         'schedule_date' => 'date',
-        'start_time' => 'datetime:H:i:s',
-        'end_time' => 'datetime:H:i:s',
         'nurse_confirmed_at' => 'datetime',
         'last_reminder_sent' => 'datetime',
         'actual_start_time' => 'datetime',
@@ -70,7 +67,10 @@ class Schedule extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    // ... rest of the existing methods remain the same ...
+    public function timeTracking(): HasOne
+    {
+        return $this->hasOne(TimeTracking::class, 'schedule_id');
+    }
 
     // Scopes
     public function scopeToday($query)
@@ -117,24 +117,57 @@ class Schedule extends Model
 
     public function getFormattedTimeSlotAttribute(): string
     {
-        return Carbon::parse($this->start_time)->format('H:i') . ' - ' . Carbon::parse($this->end_time)->format('H:i');
+        // ✅ FIXED: Parse times correctly
+        $start = $this->parseTime($this->start_time);
+        $end = $this->parseTime($this->end_time);
+        
+        return $start->format('H:i') . ' - ' . $end->format('H:i');
     }
 
-  public function getScheduleDateTimeAttribute(): ?Carbon
+    public function getScheduleDateTimeAttribute(): ?Carbon
     {
         if (!$this->schedule_date || !$this->start_time) {
             return null;
         }
         
-        return $this->schedule_date->setTimeFromTimeString($this->start_time);
+        // ✅ FIXED: Properly combine date and time
+        $scheduleDate = Carbon::parse($this->schedule_date);
+        $startTime = $this->parseTime($this->start_time);
+        
+        return Carbon::create(
+            $scheduleDate->year,
+            $scheduleDate->month,
+            $scheduleDate->day,
+            $startTime->hour,
+            $startTime->minute,
+            $startTime->second
+        );
     }
 
     public function getActualDurationAttribute(): ?int
     {
         if ($this->actual_start_time && $this->actual_end_time) {
-            return $this->actual_start_time->diffInMinutes($this->actual_end_time);
+            return abs($this->actual_end_time->diffInMinutes($this->actual_start_time));
         }
         return null;
+    }
+
+    // ✅ NEW: Helper method to parse time correctly
+    private function parseTime($time): Carbon
+    {
+        // If it's already a Carbon instance, return it
+        if ($time instanceof Carbon) {
+            return $time;
+        }
+        
+        // If it's a string with full datetime
+        if (strlen($time) > 8) {
+            $parsed = Carbon::parse($time);
+            return Carbon::createFromTime($parsed->hour, $parsed->minute, $parsed->second);
+        }
+        
+        // If it's just a time string (HH:MM:SS or HH:MM)
+        return Carbon::createFromTimeString($time);
     }
 
     // Methods
@@ -168,22 +201,21 @@ class Schedule extends Model
         ]);
     }
 
-
     public function hasTimeConflictWith(Schedule $otherSchedule): bool
     {
         if ($this->schedule_date->ne($otherSchedule->schedule_date)) {
             return false;
         }
 
-        $thisStart = Carbon::parse($this->start_time);
-        $thisEnd = Carbon::parse($this->end_time);
-        $otherStart = Carbon::parse($otherSchedule->start_time);
-        $otherEnd = Carbon::parse($otherSchedule->end_time);
+        $thisStart = $this->parseTime($this->start_time);
+        $thisEnd = $this->parseTime($this->end_time);
+        $otherStart = $this->parseTime($otherSchedule->start_time);
+        $otherEnd = $this->parseTime($otherSchedule->end_time);
 
         return $thisStart->lt($otherEnd) && $thisEnd->gt($otherStart);
     }
 
-    // Static methods for consistency with controller expectations
+    // Static methods
     public static function getShiftTypes(): array
     {
         return [
@@ -195,7 +227,6 @@ class Schedule extends Model
         ];
     }
 
-    // Alias for controller compatibility
     public static function getScheduleTypes(): array
     {
         return static::getShiftTypes();
@@ -223,25 +254,83 @@ class Schedule extends Model
         ];
     }
 
-    // Calculate duration when times are set
+    // ✅ FIXED: Boot method with better time handling
     protected static function boot()
     {
         parent::boot();
-
+        
         static::saving(function ($schedule) {
-            if ($schedule->start_time && $schedule->end_time) {
-                $start = Carbon::parse($schedule->start_time);
-                $end = Carbon::parse($schedule->end_time);
-                $schedule->duration_minutes = $start->diffInMinutes($end);
+            if ($schedule->start_time && $schedule->end_time && $schedule->schedule_date) {
+                try {
+                    // Get the schedule date
+                    $scheduleDate = Carbon::parse($schedule->schedule_date);
+                    
+                    // Parse times correctly
+                    $startTime = self::parseTimeStatic($schedule->start_time);
+                    $endTime = self::parseTimeStatic($schedule->end_time);
+                    
+                    // Create full datetime instances
+                    $start = Carbon::create(
+                        $scheduleDate->year,
+                        $scheduleDate->month,
+                        $scheduleDate->day,
+                        $startTime->hour,
+                        $startTime->minute,
+                        $startTime->second
+                    );
+                    
+                    $end = Carbon::create(
+                        $scheduleDate->year,
+                        $scheduleDate->month,
+                        $scheduleDate->day,
+                        $endTime->hour,
+                        $endTime->minute,
+                        $endTime->second
+                    );
+                    
+                    // If end is before start, it means the shift goes to next day
+                    if ($end->lt($start)) {
+                        $end->addDay();
+                    }
+                    
+                    // Calculate duration in minutes (always positive)
+                    $duration = abs($end->diffInMinutes($start));
+                    
+                    // Only update if we got a valid duration
+                    if ($duration > 0) {
+                        $schedule->duration_minutes = $duration;
+                    }
+                    
+                } catch (\Exception $e) {
+                    \Log::error('Error calculating schedule duration', [
+                        'schedule_id' => $schedule->id ?? 'new',
+                        'error' => $e->getMessage(),
+                        'start_time' => $schedule->start_time,
+                        'end_time' => $schedule->end_time,
+                        'schedule_date' => $schedule->schedule_date
+                    ]);
+                }
             }
         });
     }
 
+    // ✅ NEW: Static version of parseTime for boot method
+    private static function parseTimeStatic($time): Carbon
+    {
+        if ($time instanceof Carbon) {
+            return $time;
+        }
+        
+        if (strlen($time) > 8) {
+            $parsed = Carbon::parse($time);
+            return Carbon::createFromTime($parsed->hour, $parsed->minute, $parsed->second);
+        }
+        
+        return Carbon::createFromTimeString($time);
+    }
 
-        /**
+    /**
      * Send reminder notification to nurse via email and SMS
-     *
-     * @return array Results of the reminder sending
      */
     public function sendReminder(): array
     {
@@ -251,10 +340,8 @@ class Schedule extends Model
             'overall_success' => false
         ];
 
-        // GUARD: Check if reminder was already sent TODAY
-        if ($this->last_reminder_sent && 
-            $this->last_reminder_sent->isToday()) {
-            
+        // Check if reminder was already sent today
+        if ($this->last_reminder_sent && $this->last_reminder_sent->isToday()) {
             Log::info('Reminder skipped - already sent today', [
                 'schedule_id' => $this->id,
                 'last_sent' => $this->last_reminder_sent->toDateTimeString()
@@ -265,7 +352,7 @@ class Schedule extends Model
             return $results;
         }
 
-        // GUARD: Check max reminders
+        // Check max reminders
         if ($this->reminder_count >= 3) {
             Log::info('Reminder skipped - max count reached', [
                 'schedule_id' => $this->id,
@@ -277,13 +364,10 @@ class Schedule extends Model
             return $results;
         }
 
-        // Update timestamp IMMEDIATELY before sending (prevents race conditions)
-        $this->update([
-            'last_reminder_sent' => now()
-        ]);
+        // Update timestamp immediately
+        $this->update(['last_reminder_sent' => now()]);
 
         try {
-            // Get the nurse
             if (!$this->nurse) {
                 Log::warning('Cannot send reminder - nurse not found', [
                     'schedule_id' => $this->id
@@ -294,7 +378,7 @@ class Schedule extends Model
                 return $results;
             }
 
-            // 1. Send Email Notification
+            // Send email
             try {
                 $this->nurse->notify(new ScheduleReminder($this));
                 $results['email']['sent'] = true;
@@ -302,21 +386,19 @@ class Schedule extends Model
                 
                 Log::info('Schedule reminder email sent', [
                     'schedule_id' => $this->id,
-                    'nurse_id' => $this->nurse_id,
-                    'nurse_email' => $this->nurse->email
+                    'nurse_id' => $this->nurse_id
                 ]);
             } catch (\Exception $e) {
                 Log::error('Failed to send schedule reminder email', [
                     'schedule_id' => $this->id,
-                    'nurse_id' => $this->nurse_id,
                     'error' => $e->getMessage()
                 ]);
                 $results['email']['message'] = 'Email failed: ' . $e->getMessage();
             }
 
-            // 2. Send SMS Notification
+            // Send SMS
             try {
-                $smsService = new \App\Services\SmsService();
+                $smsService = new SmsService();
                 
                 $smsData = [
                     'nurse_name' => $this->nurse->first_name . ' ' . $this->nurse->last_name,
@@ -336,54 +418,35 @@ class Schedule extends Model
                     
                     Log::info('Schedule reminder SMS sent', [
                         'schedule_id' => $this->id,
-                        'nurse_id' => $this->nurse_id,
                         'nurse_phone' => $this->nurse->phone
                     ]);
                 } else {
                     $results['sms']['message'] = 'SMS failed: ' . $smsResult['message'];
-                    
-                    Log::warning('Failed to send schedule reminder SMS', [
-                        'schedule_id' => $this->id,
-                        'nurse_id' => $this->nurse_id,
-                        'error' => $smsResult['message']
-                    ]);
                 }
             } catch (\Exception $e) {
-                Log::error('SMS Service Exception for schedule reminder', [
+                Log::error('SMS Service Exception', [
                     'schedule_id' => $this->id,
-                    'nurse_id' => $this->nurse_id,
                     'error' => $e->getMessage()
                 ]);
                 $results['sms']['message'] = 'SMS service error: ' . $e->getMessage();
             }
 
-            // Only increment counter AFTER successful send
             $results['overall_success'] = $results['email']['sent'] || $results['sms']['sent'];
             
             if ($results['overall_success']) {
                 $this->increment('reminder_count');
-                
-                Log::info('Schedule reminder sent successfully', [
-                    'schedule_id' => $this->id,
-                    'email_sent' => $results['email']['sent'],
-                    'sms_sent' => $results['sms']['sent'],
-                    'reminder_count' => $this->reminder_count
-                ]);
             } else {
-                // Rollback timestamp if both failed
                 $this->update(['last_reminder_sent' => null]);
             }
 
             return $results;
 
         } catch (\Exception $e) {
-            // Rollback timestamp on unexpected error
             $this->update(['last_reminder_sent' => null]);
             
             Log::error('Unexpected error in sendReminder', [
                 'schedule_id' => $this->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'error' => $e->getMessage()
             ]);
 
             $results['email']['message'] = 'Unexpected error';
@@ -392,12 +455,6 @@ class Schedule extends Model
         }
     }
 
-    /**
-     * Send bulk reminders for multiple schedules
-     *
-     * @param \Illuminate\Support\Collection $schedules
-     * @return array Summary of results
-     */
     public static function sendBulkReminders($schedules): array
     {
         $summary = [
@@ -434,12 +491,14 @@ class Schedule extends Model
         }
 
         Log::info('Bulk schedule reminders sent', $summary);
-
         return $summary;
     }
-
-    public function timeTracking(): HasOne
+    
+    /**
+     * Get feedback for this schedule
+     */
+    public function feedback()
     {
-        return $this->hasOne(TimeTracking::class, 'schedule_id');
+        return $this->hasOne(PatientFeedback::class, 'schedule_id');
     }
 }

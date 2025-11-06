@@ -43,4 +43,13 @@ return [
         ],
     ],
 
+    'google' => [
+        'geocoding_api_key' => env('GOOGLE_GEOCODING_API_KEY', 'AIzaSyAa6jl4duYHgSa0o3dZh1yUvZ9dUtOAMEU'),
+    ],
+
+    'fcm' => [
+        'server_key' => env('FCM_SERVER_KEY'),
+        'sender_id' => env('FCM_SENDER_ID'),
+    ],
+
 ];

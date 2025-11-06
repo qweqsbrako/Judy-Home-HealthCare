@@ -28,7 +28,7 @@ class CarePlanSeeder extends Seeder
 
         $careTypes = ['general_care', 'elderly_care', 'pediatric_care', 'chronic_disease_management', 'palliative_care', 'rehabilitation_care'];
         $priorities = ['low', 'medium', 'high', 'critical'];
-        $frequencies = ['once_daily', 'twice_daily', 'three_times_daily', 'every_12_hours', 'every_8_hours', 'every_6_hours', 'every_4_hours', 'weekly', 'twice_weekly', 'as_needed', 'custom'];
+        $frequencies = ['once_daily', 'twice_daily', 'weekly', 'twice_weekly','monthly', 'as_needed', 'custom'];
 
         // Define status distribution: 5 draft, 5 pending, 40 with nurses
         $statusDistribution = [

@@ -697,7 +697,7 @@ const formatTime = (date) => {
 const getActionText = (status) => {
   const actionMap = {
     'pending': 'Start Visit',
-    'in-progress': 'Continue',
+    'in_progress': 'Continue',
     'completed': 'View Report'
   }
   return actionMap[status] || 'View'
