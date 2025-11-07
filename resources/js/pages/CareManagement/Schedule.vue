@@ -217,7 +217,7 @@
             <thead>
               <tr>
                 <th>Nurse</th>
-                <th>Care Plan</th>
+                <!-- <th>Care Plan</th> -->
                 <th>Date & Time</th>
                 <th>Shift Type</th>
                 <th>Status</th>
@@ -2654,6 +2654,28 @@ onUnmounted(() => {
   }
 }
 
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+    width: 95%;
+  }
+
+  .filters-section{
+    width: 95%;
+  }
+  
+}
+
+@media (max-width: 1440px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); 
+    width: 95%;
+  }
+  .filters-section{
+    width: 95%;
+  }
+}
+
 @media (max-width: 768px) {
   .schedules-page {
     padding: 16px;
@@ -2663,13 +2685,14 @@ onUnmounted(() => {
     flex-direction: column;
     gap: 16px;
   }
-  
-  .stats-grid {
+
+ .stats-grid {
     grid-template-columns: 1fr;
+    width: 95%;
   }
-  
+
   .filters-section {
-    flex-direction: column;
+    width: 95%;
   }
   
   .search-wrapper {

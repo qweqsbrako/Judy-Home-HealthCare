@@ -1408,6 +1408,8 @@ onUnmounted(() => {
   padding: 32px;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Photo Upload Styles */
@@ -1737,7 +1739,8 @@ onUnmounted(() => {
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid #f1f5f9;
-  overflow: visible;
+  /* overflow: hidden; */
+  max-width: 100%;
 }
 
 
@@ -1745,6 +1748,8 @@ onUnmounted(() => {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+    min-width: 800px;
+
 }
 
 .modern-table thead {
@@ -2478,12 +2483,29 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* Responsive */
+
 @media (max-width: 1200px) {
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+    width: 95%;
+  }
+
+  .filters-section{
+    width: 95%;
+  }
+  
+}
+
+@media (max-width: 1440px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); 
+    width: 95%;
+  }
+  .filters-section{
+    width: 95%;
   }
 }
+
 
 @media (max-width: 768px) {
   .users-page {
@@ -2501,10 +2523,12 @@ onUnmounted(() => {
   
   .stats-grid {
     grid-template-columns: 1fr;
+    width: 95%;
   }
   
   .filters-section {
     flex-direction: column;
+    width: 95%;
   }
   
   .search-wrapper {

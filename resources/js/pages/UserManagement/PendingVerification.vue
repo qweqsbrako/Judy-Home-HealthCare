@@ -886,6 +886,8 @@ onMounted(() => {
   padding: 32px;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Photo Upload Styles */
@@ -2012,16 +2014,46 @@ onMounted(() => {
   margin-top: 8px;
 }
 
-/* Responsive */
 @media (max-width: 1200px) {
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+    width: 95%;
+  }
+
+  .filters-section{
+    width: 95%;
+  }
+  
+}
+
+@media (max-width: 1440px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); 
+    width: 95%;
+  }
+  .filters-section{
+    width: 95%;
   }
 }
+
 
 @media (max-width: 768px) {
   .users-page {
     padding: 16px;
+  }
+
+  .checkbox-input{
+    min-height: 15px;
+    min-width: 15px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    width: 95%;
+  }
+
+  .filters-section {
+    width: 95%;
   }
   
   .page-header {

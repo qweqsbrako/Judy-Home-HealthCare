@@ -136,12 +136,12 @@
               <tr>
                 <th>Patient</th>
                 <th>Care Plan</th>
-                <th>Doctor</th>
+                <!-- <th>Doctor</th> -->
                 <th>Assigned Nurses</th>
                 <th>Care Type</th>
                 <th>Status</th>
-                <th>Priority</th>
-                <th>Progress</th>
+                <!-- <th>Priority</th> -->
+                <!-- <th>Progress</th> -->
                 <th>Actions</th>
               </tr>
             </thead>
@@ -164,9 +164,8 @@
                   </div>
                 </td>
                 
-                <td>
+                <!-- <td>
                   <div class="contact-cell">
-                      <!-- Check if doctor exists -->
                       <template v-if="plan.doctor">
                         <div class="contact-primary">Dr. {{ plan.doctor.first_name }} {{ plan.doctor.last_name }}</div>
                         <div class="contact-secondary">{{ formatSpecialization(plan.doctor.specialization) }}</div>
@@ -176,7 +175,7 @@
                         <div class="contact-secondary">—</div>
                       </template>
                     </div>
-                </td>
+                </td> -->
                 
                 <td>
                   <div class="nurses-cell">
@@ -215,20 +214,20 @@
                   </span>
                 </td>
                 
-                <td>
+                <!-- <td>
                   <span :class="'modern-badge ' + getPriorityBadgeClass(plan.priority)">
                     {{ formatPriority(plan.priority) }}
                   </span>
-                </td>
+                </td> -->
                 
-                <td>
+                <!-- <td>
                   <div class="progress-cell">
                     <div class="progress-bar-small">
                       <div class="progress-fill-small" :style="`width: ${plan.completion_percentage}%`"></div>
                     </div>
                     <span class="progress-text-small">{{ plan.completion_percentage }}%</span>
                   </div>
-                </td>
+                </td> -->
                 
                 <td>
                   <div class="action-cell">
@@ -1458,6 +1457,8 @@ onUnmounted(() => {
   padding: 32px;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .page-header {
@@ -1505,6 +1506,9 @@ onUnmounted(() => {
   height: 18px;
 }
 
+
+
+
 .btn-modern.btn-primary {
   background: #667eea;
   color: white;
@@ -1530,7 +1534,7 @@ onUnmounted(() => {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(4, 1fr); /* Force 4 equal columns */
   gap: 20px;
   margin-bottom: 32px;
 }
@@ -1722,7 +1726,7 @@ onUnmounted(() => {
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid #f1f5f9;
-  overflow: visible;
+  max-width: 100%;
 }
 
 
@@ -2654,6 +2658,29 @@ onUnmounted(() => {
   
   .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+    width: 95%;
+  }
+
+  .filters-section{
+    width: 95%;
+  }
+  
+}
+
+@media (max-width: 1440px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); 
+    width: 95%;
+  }
+  .filters-section{
+    width: 95%;
   }
 }
 

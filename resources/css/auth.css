@@ -987,8 +987,9 @@ html, body {
 /* Mobile Devices (768px and below) */
 @media (max-width: 768px) {
   .auth-branding-section {
-    padding: 1.5rem;
-    min-height: auto;
+    /* padding: 1.5rem;
+    min-height: auto; */
+    display: none;
   }
   
   .auth-brand-title {
@@ -1029,7 +1030,7 @@ html, body {
   }
   
   .auth-link {
-    align-self: flex-start;
+    align-self: center;
   }
   
   .error-alert {

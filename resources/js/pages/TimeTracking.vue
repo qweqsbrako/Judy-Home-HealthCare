@@ -1488,6 +1488,8 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   padding: 32px;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Page Header */
@@ -1860,7 +1862,7 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid #f1f5f9;
-  overflow: visible;
+  max-width: 100%;
 }
 
 .modern-table {
@@ -2690,6 +2692,28 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   }
 }
 
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+    max-width: 95%;
+  }
+
+  .filters-section{
+    max-width: 95%;
+  }
+  
+}
+
+@media (max-width: 1440px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); 
+    max-width: 95%;
+  }
+  .filters-section{
+    max-width: 95%;
+  }
+}
+
 @media (max-width: 768px) {
   .time-tracking-page {
     padding: 16px;
@@ -2702,6 +2726,7 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   
   .stats-grid {
     grid-template-columns: 1fr;
+    
   }
   
   .session-content {
@@ -2724,6 +2749,7 @@ watch([statusFilter, sessionTypeFilter, viewFilter, nurseFilter], () => {
   
   .filters-section {
     flex-direction: column;
+    max-width: 95%;
   }
   
   .search-wrapper {

@@ -12,13 +12,13 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            Export
+            <span class="btn-text">Export</span>
           </button>
           <button @click="openCreateModal" class="btn-modern btn-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            Add User
+            <span class="btn-text">Add User</span>
           </button>
         </div>
       </div>
@@ -123,10 +123,10 @@
             <thead>
               <tr>
                 <th>User</th>
-                <th>Contact</th>
+                <th class="hide-mobile">Contact</th>
                 <th>Role</th>
-                <th>Status</th>
-                <th>Last Login</th>
+                <th class="hide-mobile">Status</th>
+                <th class="hide-tablet">Last Login</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -138,10 +138,21 @@
                     <div class="user-details-table">
                       <div class="user-name-table">{{ user.first_name }} {{ user.last_name }}</div>
                       <div class="user-id-table">{{ user.ghana_card_number }}</div>
+                      <!-- Mobile: Show contact info here -->
+                      <div class="mobile-contact">
+                        <div class="contact-primary-mobile">{{ user.email }}</div>
+                        <div class="contact-secondary-mobile">{{ user.phone }}</div>
+                      </div>
+                      <!-- Mobile: Show status here -->
+                      <div class="mobile-status">
+                        <span :class="'modern-badge modern-badge-sm ' + getStatusBadgeColor(user.verification_status)">
+                          {{ capitalizeFirst(user.verification_status) }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </td>
-                <td>
+                <td class="hide-mobile">
                   <div class="contact-cell">
                     <div class="contact-primary">{{ user.email }}</div>
                     <div class="contact-secondary">{{ user.phone }}</div>
@@ -152,12 +163,12 @@
                     {{ capitalizeFirst(user.role) }}
                   </span>
                 </td>
-                <td>
+                <td class="hide-mobile">
                   <span :class="'modern-badge ' + getStatusBadgeColor(user.verification_status)">
                     {{ capitalizeFirst(user.verification_status) }}
                   </span>
                 </td>
-                <td class="text-secondary">
+                <td class="text-secondary hide-tablet">
                   {{ formatTimeAgo(user.last_login_at) }}
                 </td>
                 <td>
@@ -183,7 +194,6 @@
                         Edit User
                       </button>
                       
-                      <!-- NEW: Change Password Button -->
                       <button v-if="user.role !== 'superadmin'" @click="openPasswordModal(user)" class="dropdown-item-modern">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -242,45 +252,45 @@
       </div>
 
       <!-- Pagination -->
-    <div v-if="lastPage > 1" class="pagination-container">
-      <div class="pagination-info">
-        Showing {{ (currentPage - 1) * perPage + 1 }} to {{ Math.min(currentPage * perPage, total) }} of {{ total }} users
-      </div>
-      <div class="pagination-controls">
-        <button 
-          @click="prevPage" 
-          :disabled="currentPage === 1"
-          class="pagination-btn"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
-          Previous
-        </button>
-        
-        <div class="pagination-pages">
-          <button
-            v-for="page in getPaginationPages()"
-            :key="page"
-            @click="goToPage(page)"
-            :class="['pagination-page', { active: page === currentPage }]"
+      <div v-if="lastPage > 1" class="pagination-container">
+        <div class="pagination-info">
+          Showing {{ (currentPage - 1) * perPage + 1 }} to {{ Math.min(currentPage * perPage, total) }} of {{ total }} users
+        </div>
+        <div class="pagination-controls">
+          <button 
+            @click="prevPage" 
+            :disabled="currentPage === 1"
+            class="pagination-btn"
           >
-            {{ page }}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span class="btn-text">Previous</span>
+          </button>
+          
+          <div class="pagination-pages">
+            <button
+              v-for="page in getPaginationPages()"
+              :key="page"
+              @click="goToPage(page)"
+              :class="['pagination-page', { active: page === currentPage }]"
+            >
+              {{ page }}
+            </button>
+          </div>
+          
+          <button 
+            @click="nextPage" 
+            :disabled="currentPage === lastPage"
+            class="pagination-btn"
+          >
+            <span class="btn-text">Next</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
-        
-        <button 
-          @click="nextPage" 
-          :disabled="currentPage === lastPage"
-          class="pagination-btn"
-        >
-          Next
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
       </div>
-    </div>
 
       <!-- Create/Edit User Modal -->
       <div v-if="showUserModal" class="modal-overlay" @click.self="closeUserModal">
@@ -308,7 +318,6 @@
             <div class="form-group form-grid-full">
               <label>Profile Photo</label>
               <div class="photo-upload-container">
-                <!-- Photo Preview -->
                 <div class="photo-preview">
                   <img 
                     v-if="photoPreview || userForm.current_photo_url" 
@@ -324,7 +333,6 @@
                   </div>
                 </div>
                 
-                <!-- Upload Controls -->
                 <div class="photo-controls">
                   <input
                     type="file"
@@ -419,7 +427,6 @@
                     type="text"
                     v-model="userForm.ghana_card_number"
                     placeholder="GHA-123456789-1"
-                    
                   />
                 </div>
 
@@ -739,7 +746,7 @@
         </div>
       </div>
 
-      <!-- NEW: Change Password Modal -->
+      <!-- Change Password Modal -->
       <div v-if="showPasswordModal && currentUser" class="modal-overlay" @click.self="closePasswordModal">
         <div class="modal modal-sm">
           <div class="modal-header">
@@ -857,14 +864,13 @@ const showSuspendModal = ref(false)
 const isSuspending = ref(false) 
 const showReactivateModal = ref(false)
 const isReactivating = ref(false)
-// NEW: Password modal states
 const showPasswordModal = ref(false)
 const isSendingPassword = ref(false)
 
 // Dropdown state
 const activeDropdown = ref(null)
 
-// Stats computed properties (now from backend)
+// Stats computed properties
 const verifiedCount = computed(() => stats.value.verified_count)
 const verifiedPercentage = computed(() => stats.value.verified_percentage)
 const pendingCount = computed(() => stats.value.pending_count)
@@ -916,15 +922,13 @@ const userForm = ref({
   photo: null
 })
 
-// ========== PHOTO UPLOAD REFS ==========
+// Photo upload refs
 const photoInput = ref(null)
 const photoPreview = ref(null)
 const photoFile = ref(null)
 const photoToRemove = ref(false)
 
-// ========== PHOTO HANDLER FUNCTIONS ==========
-// Add these functions AFTER your other functions
-
+// Photo handler functions
 const handlePhotoChange = (event) => {
   const file = event.target.files[0]
   if (!file) return
@@ -955,24 +959,24 @@ const removePhoto = () => {
   photoPreview.value = null
   photoFile.value = null
   photoToRemove.value = true
-  userForm.value.current_photo_url = user.avatar_url || null
+  userForm.value.current_photo_url = null
   
   if (photoInput.value) {
     photoInput.value.value = ''
   }
 }
 
-// NEW: Password change form
+// Password change form
 const passwordForm = ref({
   new_password: '',
   confirm_password: '',
   send_via_email: false
 })
 
-// Computed properties - now filters are handled by backend
+// Computed properties
 const filteredUsers = computed(() => users.value)
 
-// Methods - Updated to use service with pagination
+// Methods
 const loadUsers = async (page = 1) => {
   loading.value = true
   try {
@@ -984,15 +988,10 @@ const loadUsers = async (page = 1) => {
       status: statusFilter.value
     }
     
-    console.log('Loading users with params:', params) // Debug log
-    
     const response = await usersService.getUsers(params)
-    
-    console.log('Response received:', response) // Debug log
     
     users.value = response.data || []
     
-    // Update pagination state
     if (response.meta) {
       currentPage.value = response.meta.current_page
       lastPage.value = response.meta.last_page
@@ -1000,7 +999,6 @@ const loadUsers = async (page = 1) => {
       total.value = response.meta.total
     }
     
-    // Update stats
     if (response.stats) {
       stats.value = response.stats
     }
@@ -1131,7 +1129,6 @@ const openReactivateModal = (user) => {
   activeDropdown.value = null
 }
 
-// NEW: Open password modal function
 const openPasswordModal = (user) => {
   currentUser.value = user
   passwordForm.value = {
@@ -1165,7 +1162,6 @@ const closeReactivateModal = () => {
   currentUser.value = null
 }
 
-// NEW: Close password modal function
 const closePasswordModal = () => {
   showPasswordModal.value = false
   currentUser.value = null
@@ -1185,31 +1181,25 @@ const saveUser = async () => {
   isSaving.value = true
   
   try {
-    // Check if we have a photo to upload
     const hasPhotoChange = photoFile.value || photoToRemove.value
     
     if (hasPhotoChange) {
-      // Use FormData for photo uploads
       const formData = new FormData()
       
-      // Add all user form fields to FormData
       Object.keys(userForm.value).forEach(key => {
         if (userForm.value[key] !== null && userForm.value[key] !== undefined && key !== 'current_photo_url') {
           formData.append(key, userForm.value[key])
         }
       })
       
-      // Add photo if selected
       if (photoFile.value) {
         formData.append('photo', photoFile.value)
       }
       
-      // Add remove_photo flag
       if (photoToRemove.value) {
         formData.append('remove_photo', '1')
       }
       
-      // For updates, Laravel needs _method=PUT for multipart/form-data
       if (isEditing.value) {
         formData.append('_method', 'PUT')
         await usersService.updateUserWithPhoto(currentUser.value.id, formData)
@@ -1218,7 +1208,6 @@ const saveUser = async () => {
       }
       
     } else {
-      // No photo changes - use regular JSON
       if (isEditing.value) {
         await usersService.updateUser(currentUser.value.id, userForm.value)
       } else {
@@ -1226,7 +1215,6 @@ const saveUser = async () => {
       }
     }
     
-    // Reset photo states
     photoFile.value = null
     photoPreview.value = null
     photoToRemove.value = false
@@ -1303,9 +1291,7 @@ const reactivateUser = async () => {
   isReactivating.value = false
 }
 
-// NEW: Change password function
 const changePassword = async () => {
-  // Validate passwords match if not sending via email
   if (!passwordForm.value.send_via_email) {
     if (passwordForm.value.new_password !== passwordForm.value.confirm_password) {
       toast.showError('Passwords do not match!')
@@ -1326,11 +1312,9 @@ const changePassword = async () => {
   
   try {
     if (passwordForm.value.send_via_email) {
-      // Send password reset email
       const result = await usersService.sendPasswordResetEmail(currentUser.value.id)
       toast.showSuccess(result.message || 'Password reset email sent successfully!')
     } else {
-      // Change password manually
       const result = await usersService.changeUserPassword(currentUser.value.id, {
         new_password: passwordForm.value.new_password
       })
@@ -1415,25 +1399,21 @@ const handleClickOutside = (event) => {
   }
 }
 
-// Debounce timer for search
 let searchDebounceTimer = null
 
-// Watch for search query changes with debounce
 watch(searchQuery, () => {
   clearTimeout(searchDebounceTimer)
   searchDebounceTimer = setTimeout(() => {
     currentPage.value = 1
     loadUsers(1)
-  }, 500) // 500ms delay after user stops typing
+  }, 500)
 })
 
-// Watch for filter changes (instant reload)
 watch([roleFilter, statusFilter], () => {
   currentPage.value = 1
   loadUsers(1)
 })
 
-// Lifecycle
 onMounted(() => {
   loadUsers()
   document.addEventListener('click', handleClickOutside)
@@ -1441,7 +1421,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
-  clearTimeout(searchDebounceTimer) // Clean up timer
+  clearTimeout(searchDebounceTimer)
 })
 </script>
 
@@ -1456,6 +1436,8 @@ onUnmounted(() => {
   padding: 32px;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Page Header */
@@ -1464,6 +1446,7 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 32px;
+  gap: 16px;
 }
 
 .page-header-content h1 {
@@ -1484,6 +1467,7 @@ onUnmounted(() => {
 .page-header-actions {
   display: flex;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 /* Modern Buttons */
@@ -1498,11 +1482,14 @@ onUnmounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .btn-modern svg {
   width: 18px;
   height: 18px;
+  flex-shrink: 0;
 }
 
 .btn-modern.btn-primary {
@@ -1587,6 +1574,7 @@ onUnmounted(() => {
 
 .stat-content {
   flex: 1;
+  min-width: 0;
 }
 
 .stat-label {
@@ -1658,6 +1646,7 @@ onUnmounted(() => {
   font-size: 14px;
   transition: all 0.2s;
   font-weight: 500;
+  min-height: 44px;
 }
 
 .search-input:focus {
@@ -1681,6 +1670,7 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.2s;
   min-width: 150px;
+  min-height: 44px;
 }
 
 .filter-select:focus {
@@ -1726,14 +1716,21 @@ onUnmounted(() => {
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid #f1f5f9;
-  overflow: visible;
+  overflow: hidden;
+  max-width: 100%;
 }
 
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
 
 .modern-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  min-width: 800px;
 }
 
 .modern-table thead {
@@ -1749,6 +1746,7 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.8px;
   border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
 }
 
 .modern-table tbody tr {
@@ -1770,7 +1768,7 @@ onUnmounted(() => {
 /* User Cell */
 .user-cell {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
 
@@ -1781,6 +1779,11 @@ onUnmounted(() => {
   object-fit: cover;
   border: 2px solid #e2e8f0;
   flex-shrink: 0;
+}
+
+.user-details-table {
+  flex: 1;
+  min-width: 0;
 }
 
 .user-name-table {
@@ -1794,6 +1797,12 @@ onUnmounted(() => {
   font-size: 12px;
   color: #94a3b8;
   font-weight: 500;
+}
+
+/* Mobile-specific contact display */
+.mobile-contact,
+.mobile-status {
+  display: none;
 }
 
 /* Contact Cell */
@@ -1829,6 +1838,12 @@ onUnmounted(() => {
   font-weight: 700;
   text-transform: capitalize;
   letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.modern-badge-sm {
+  padding: 4px 8px;
+  font-size: 11px;
 }
 
 .modern-badge.badge-primary {
@@ -1862,8 +1877,8 @@ onUnmounted(() => {
 }
 
 .action-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   background: transparent;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -1910,8 +1925,7 @@ onUnmounted(() => {
   }
 }
 
-/* Required field indicator */
-.form-group label .required {
+.required {
   color: #ef4444;
   font-weight: 700;
   margin-left: 2px;
@@ -1932,6 +1946,7 @@ onUnmounted(() => {
   font-weight: 500;
   border-radius: 8px;
   transition: all 0.2s;
+  min-height: 44px;
 }
 
 .dropdown-item-modern:hover {
@@ -1941,6 +1956,7 @@ onUnmounted(() => {
 .dropdown-item-modern svg {
   width: 18px;
   height: 18px;
+  flex-shrink: 0;
 }
 
 .dropdown-item-modern.success {
@@ -2020,6 +2036,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .pagination-btn {
@@ -2035,6 +2052,8 @@ onUnmounted(() => {
   color: #334155;
   cursor: pointer;
   transition: all 0.2s;
+  min-height: 40px;
+  white-space: nowrap;
 }
 
 .pagination-btn:hover:not(:disabled) {
@@ -2050,6 +2069,7 @@ onUnmounted(() => {
 .pagination-btn svg {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
 }
 
 .pagination-pages {
@@ -2058,8 +2078,8 @@ onUnmounted(() => {
 }
 
 .pagination-page {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2115,6 +2135,8 @@ onUnmounted(() => {
   overflow: hidden;
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
   animation: slideUp 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes slideUp {
@@ -2146,6 +2168,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -2157,8 +2180,8 @@ onUnmounted(() => {
 }
 
 .modal-close {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: none;
   background: #f8fafc;
   border-radius: 10px;
@@ -2167,6 +2190,7 @@ onUnmounted(() => {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .modal-close:hover {
@@ -2182,8 +2206,8 @@ onUnmounted(() => {
 
 .modal-body {
   padding: 28px;
-  max-height: calc(90vh - 160px);
   overflow-y: auto;
+  flex: 1;
 }
 
 .modal-actions {
@@ -2193,6 +2217,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 12px;
   background: #f8fafc;
+  flex-shrink: 0;
 }
 
 /* Form Styles */
@@ -2224,6 +2249,7 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.2s;
+  min-height: 44px;
 }
 
 .form-group input:focus,
@@ -2252,8 +2278,6 @@ onUnmounted(() => {
   grid-column: 1 / -1;
 }
 
-
-
 .btn {
   padding: 10px 20px;
   border: none;
@@ -2265,6 +2289,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 44px;
+  justify-content: center;
 }
 
 .btn-primary {
@@ -2304,6 +2330,12 @@ onUnmounted(() => {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none !important;
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13px;
+  min-height: 40px;
 }
 
 .spinner {
@@ -2364,6 +2396,7 @@ onUnmounted(() => {
   background: #f8fafc;
   border-radius: 10px;
   margin-bottom: 8px;
+  word-break: break-word;
 }
 
 .contact-item-view svg {
@@ -2433,7 +2466,6 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
-/* NEW: Password Option Card CSS */
 .password-option-card {
   background: #f8fafc;
   padding: 16px;
@@ -2451,29 +2483,81 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* Responsive */
+/* Hide columns on smaller screens */
+.hide-mobile {
+  display: table-cell;
+}
+
+.hide-tablet {
+  display: table-cell;
+}
+
 @media (max-width: 1200px) {
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+    width: 95%;
+  }
+
+  .filters-section{
+    width: 95%;
+  }
+  
+}
+
+@media (max-width: 1440px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); 
+    width: 95%;
+  }
+  .filters-section{
+    width: 95%;
   }
 }
 
+
+/* Mobile (768px and below) */
 @media (max-width: 768px) {
   .users-page {
     padding: 16px;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   
   .page-header {
     flex-direction: column;
-    gap: 16px;
+    align-items: stretch;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .filters-section{
+    width: 95%;
   }
   
   .page-header-content h1 {
     font-size: 24px;
   }
+
+  .page-header-actions {
+    width: 100%;
+    max-width: 100%;
+    flex-direction: column;
+  }
+
+  .btn-modern {
+    flex: 1;
+    width: 100%;
+    justify-content: center;
+  }
   
   .stats-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 0 8px;
+  }
+
+  .stat-value {
+    font-size: 28px;
   }
   
   .filters-section {
@@ -2486,22 +2570,175 @@ onUnmounted(() => {
   
   .filters-group {
     flex-direction: column;
+    width: 100%;
   }
   
   .filter-select {
     width: 100%;
   }
 
-  .user-view-grid {
-    grid-template-columns: 1fr;
+  /* Show mobile contact info in user cell */
+  .hide-mobile {
+    display: none;
   }
-  
+
+  .mobile-contact {
+    display: block;
+    margin-top: 4px;
+  }
+
+  .contact-primary-mobile {
+    font-size: 12px;
+    color: #334155;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .contact-secondary-mobile {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 1px;
+  }
+
+  .mobile-status {
+    display: block;
+    margin-top: 6px;
+  }
+
+  .modern-table {
+    min-width: 600px;
+  }
+
+  .pagination-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-info {
+    text-align: center;
+    width: 100%;
+  }
+
+  .pagination-controls {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .pagination-btn .btn-text {
+    display: none;
+  }
+
   .details-grid-view {
     grid-template-columns: 1fr;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+}
+
+/* Small Mobile (480px and below) */
+@media (max-width: 480px) {
+  .users-page {
+    padding: 12px;
+  }
+
+  .page-header-content h1 {
+    font-size: 20px;
+  }
+
+  .page-header-content p {
+    font-size: 13px;
+  }
+
+
+  .stat-card {
+    padding: 20px;
+    max-width: 100%;
+
+  }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .modal {
+    border-radius: 16px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-actions {
+    padding: 20px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+  }
+
+  .modern-table {
+    min-width: 500px;
+  }
+
+  .user-avatar-table {
+    width: 36px;
+    height: 36px;
+  }
+
+  .modern-badge {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .pagination-page {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .profile-avatar-large {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+/* Extra Small (360px and below) */
+@media (max-width: 360px) {
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .modern-table {
+    min-width: 450px;
+  }
+
+  .modern-badge {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+}
+
+/* Landscape Mobile */
+@media (max-width: 812px) and (orientation: landscape) {
+  .page-header {
+    flex-direction: row;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

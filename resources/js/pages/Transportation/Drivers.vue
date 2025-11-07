@@ -1372,6 +1372,8 @@ onUnmounted(() => {
   padding: 32px;
   background: #f8fafc;
   min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Page Header */
@@ -2753,10 +2755,12 @@ onUnmounted(() => {
   
   .stats-grid {
     grid-template-columns: 1fr;
+    width: 95%;
   }
   
   .filters-section {
     flex-direction: column;
+    width: 95%;
   }
   
   .search-wrapper {
