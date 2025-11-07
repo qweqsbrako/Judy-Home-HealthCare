@@ -1432,6 +1432,7 @@ onUnmounted(() => {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
+
 .users-page {
   padding: 32px;
   background: #f8fafc;
@@ -2504,13 +2505,216 @@ onUnmounted(() => {
   
 }
 
+
+/* Medium-Large Screens (13-15 inch laptops: 1366px - 1440px) */
 @media (max-width: 1440px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr); 
-    width: 95%;
+  .users-page {
+    padding: 24px;
   }
-  .filters-section{
-    width: 95%;
+
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .page-header-content h1 {
+    font-size: 28px;
+  }
+
+  .page-header-content p {
+    font-size: 14px;
+  }
+
+  .btn-modern {
+    padding: 9px 16px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .btn-modern svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .stats-grid {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    padding: 20px;
+  }
+
+  .stat-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .stat-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-change {
+    font-size: 12px;
+  }
+
+  .filters-section {
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+
+  .search-input,
+  .filter-select {
+    padding: 9px 12px 9px 40px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .search-icon {
+    left: 12px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .filter-select {
+    min-width: 140px;
+    padding: 9px 12px;
+  }
+
+  .modern-table th {
+    padding: 14px 18px;
+    font-size: 11px;
+  }
+
+  .modern-table td {
+    padding: 14px 18px;
+    font-size: 13px;
+  }
+
+  .user-avatar-table {
+    width: 40px;
+    height: 40px;
+  }
+
+  .user-name-table {
+    font-size: 13px;
+  }
+
+  .user-id-table {
+    font-size: 11px;
+  }
+
+  .contact-primary {
+    font-size: 13px;
+  }
+
+  .contact-secondary {
+    font-size: 12px;
+  }
+
+  .modern-badge {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .action-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .action-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .dropdown-item-modern {
+    padding: 9px 10px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .dropdown-item-modern svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .pagination-container {
+    padding: 18px 20px;
+  }
+
+  .pagination-info {
+    font-size: 13px;
+  }
+
+  .pagination-btn {
+    padding: 7px 12px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+
+  .pagination-page {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .modal-header,
+  .modal-body {
+    padding: 22px 24px;
+  }
+
+  .modal-actions {
+    padding: 18px 24px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+  }
+
+  .form-group label {
+    font-size: 12px;
+    margin-bottom: 7px;
+  }
+
+  .form-group input,
+  .form-group select {
+    padding: 9px 12px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .btn {
+    padding: 9px 18px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .btn-sm {
+    padding: 7px 14px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+
+  .photo-preview {
+    width: 110px;
+    height: 110px;
+  }
+
+  .preview-placeholder svg {
+    width: 42px;
+    height: 42px;
+  }
+
+  .preview-placeholder p {
+    font-size: 12px;
   }
 }
 
@@ -2728,6 +2932,73 @@ onUnmounted(() => {
   .modern-badge {
     font-size: 10px;
     padding: 4px 8px;
+  }
+}
+
+/* Tablets and Small Laptops (1024px and below) */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .user-view-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-profile-section {
+    padding-bottom: 24px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+}
+
+
+/* Smaller Laptops (1200px - 1366px) */
+@media (max-width: 1366px) {
+  .users-page {
+    padding: 20px;
+  }
+
+  .page-header-content h1 {
+    font-size: 26px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-card {
+    padding: 18px;
+  }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .stat-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .stat-value {
+    font-size: 26px;
+  }
+
+  .modern-table th {
+    padding: 12px 16px;
+  }
+
+  .modern-table td {
+    padding: 12px 16px;
+  }
+
+  .profile-avatar-large {
+    width: 110px;
+    height: 110px;
+  }
+
+  .profile-name-view {
+    font-size: 18px;
   }
 }
 
