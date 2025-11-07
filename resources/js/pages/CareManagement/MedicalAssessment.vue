@@ -2722,24 +2722,338 @@ watch(
 .text-gray-600 {
   color: #64748b;
 }
+/* Medium-Large Screens (13-15 inch laptops: 1366px - 1440px) */
+@media (max-width: 1440px) {
+  .progress-notes-page {
+    padding: 24px;
+  }
 
-/* Responsive Design */
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .page-header-content h1 {
+    font-size: 28px;
+  }
+
+  .page-header-content p {
+    font-size: 14px;
+  }
+
+  .btn-modern {
+    padding: 9px 16px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .btn-modern svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .stats-grid {
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    padding: 20px;
+  }
+
+  .stat-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .stat-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-change {
+    font-size: 12px;
+  }
+
+  .filters-section {
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+
+  .search-input,
+  .filter-select {
+    padding: 9px 12px 9px 40px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .search-icon {
+    left: 12px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .filter-select {
+    min-width: 140px;
+    padding: 9px 12px;
+  }
+
+  .modern-table th {
+    padding: 14px 18px;
+    font-size: 11px;
+  }
+
+  .modern-table td {
+    padding: 14px 18px;
+    font-size: 13px;
+  }
+
+  .user-avatar-table {
+    width: 40px;
+    height: 40px;
+  }
+
+  .user-name-table {
+    font-size: 13px;
+  }
+
+  .user-id-table {
+    font-size: 11px;
+  }
+
+  .contact-primary {
+    font-size: 13px;
+  }
+
+  .contact-secondary {
+    font-size: 12px;
+  }
+
+  .modern-badge {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .action-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .action-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .dropdown-item-modern {
+    padding: 9px 10px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .dropdown-item-modern svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .pagination-container {
+    padding: 18px 20px;
+  }
+
+  .pagination-info {
+    font-size: 13px;
+  }
+
+  .pagination-btn {
+    padding: 7px 12px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+
+  .pagination-page {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .modal-header,
+  .modal-body {
+    padding: 22px 24px;
+  }
+
+  .modal-actions {
+    padding: 18px 24px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+  }
+
+  .modal-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .form-group label {
+    font-size: 12px;
+    margin-bottom: 7px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 9px 12px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .btn {
+    padding: 9px 18px;
+    font-size: 13px;
+    min-height: 40px;
+  }
+
+  .form-section-title {
+    font-size: 16px;
+  }
+
+  .note-header-card {
+    padding: 18px;
+  }
+
+  .note-section {
+    padding: 18px;
+  }
+
+  .section-title {
+    font-size: 15px;
+  }
+}
+
+/* Smaller Laptops (1200px - 1366px) */
+@media (max-width: 1366px) {
+  .progress-notes-page {
+    padding: 20px;
+  }
+
+  .page-header-content h1 {
+    font-size: 26px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-card {
+    padding: 18px;
+  }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .stat-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .stat-value {
+    font-size: 26px;
+  }
+
+  .modern-table th {
+    padding: 12px 16px;
+  }
+
+  .modern-table td {
+    padding: 12px 16px;
+  }
+}
+
+/* Tablets and Small Laptops (1024px and below) */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filters-group {
+    flex-wrap: wrap;
+  }
+
+  .filter-select {
+    min-width: 120px;
+  }
+}
+
+/* Mobile (768px and below) */
 @media (max-width: 768px) {
-  .medical-assessment-page {
+  .progress-notes-page {
     padding: 16px;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   
   .page-header {
     flex-direction: column;
-    gap: 16px;
+    align-items: stretch;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .page-header-content h1 {
+    font-size: 22px;
+  }
+
+  .page-header-content p {
+    font-size: 13px;
+  }
+
+  .page-header-actions {
+    width: 100%;
+    max-width: 100%;
+    flex-direction: column;
+  }
+
+  .btn-modern {
+    flex: 1;
+    width: 100%;
+    justify-content: center;
   }
   
   .stats-grid {
     grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 0;
+  }
+
+  .stat-card {
+    padding: 18px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .stat-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .stat-icon svg {
+    width: 22px;
+    height: 22px;
   }
   
   .filters-section {
     flex-direction: column;
+    padding: 16px;
   }
   
   .search-wrapper {
@@ -2748,42 +3062,270 @@ watch(
   
   .filters-group {
     flex-direction: column;
+    width: 100%;
+    gap: 10px;
   }
   
   .filter-select {
     width: 100%;
   }
 
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modern-table {
+    min-width: 900px;
+  }
+
+  .pagination-container {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .pagination-info {
+    text-align: center;
+    width: 100%;
+    font-size: 12px;
+  }
+
+  .pagination-controls {
+    justify-content: center;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }
-  
-  .patient-header {
-    flex-direction: column;
-    text-align: center;
+
+  .modal-actions {
+    flex-direction: column-reverse;
   }
-  
-  .patient-meta {
-    flex-direction: column;
-    gap: 8px;
+
+  .modal-actions .btn {
+    width: 100%;
   }
-  
-  .info-grid {
+
+  .modal-header,
+  .modal-body {
+    padding: 20px;
+  }
+
+  .modal-actions {
+    padding: 16px 20px;
+  }
+
+  .patient-nurse-info {
     grid-template-columns: 1fr;
   }
-  
+
   .vitals-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
-  .assessment-results {
+
+  .observations-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .signature-section {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
+/* Small Mobile (480px and below) */
+@media (max-width: 480px) {
+  .progress-notes-page {
+    padding: 12px;
+  }
+
+  .page-header-content h1 {
+    font-size: 20px;
+  }
+
+  .page-header-content p {
+    font-size: 12px;
+  }
+
+  .stat-card {
+    padding: 16px;
+    max-width: 100%;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+  }
+
+  .filters-section {
+    padding: 14px;
+  }
+
+  .search-input,
+  .filter-select {
+    font-size: 12px;
+    padding: 8px 10px 8px 36px;
+    min-height: 38px;
+  }
+
+  .filter-select {
+    padding: 8px 10px;
+  }
+
+  .modal {
+    border-radius: 16px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-actions {
+    padding: 18px;
+  }
+
+  .modal-title {
+    font-size: 17px;
+  }
+
+  .modal-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .modern-table {
+    min-width: 800px;
+  }
+
+  .user-avatar-table {
+    width: 36px;
+    height: 36px;
+  }
+
+  .user-name-table {
+    font-size: 12px;
+  }
+
+  .modern-badge {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+
+  .pagination-page {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .pagination-btn {
+    padding: 7px 10px;
+    min-height: 34px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 12px;
+    padding: 8px 10px;
+    min-height: 38px;
+  }
+
+  .btn {
+    font-size: 12px;
+    padding: 8px 16px;
+    min-height: 38px;
+  }
+
+  .form-section-title {
+    font-size: 15px;
+  }
+
+  .checkbox-text {
+    font-size: 13px;
+  }
+
+  .intervention-input {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+
+  .note-header-card,
+  .note-section {
+    padding: 16px;
+  }
+
+  .section-title {
+    font-size: 14px;
+  }
+
   .vitals-grid {
     grid-template-columns: 1fr;
+  }
+
+  .intervention-item {
+    padding: 10px;
+  }
+
+  .intervention-item strong {
+    font-size: 12px;
+  }
+
+  .intervention-item span {
+    font-size: 13px;
+  }
+}
+
+/* Extra Small (360px and below) */
+@media (max-width: 360px) {
+  .progress-notes-page {
+    padding: 10px;
+  }
+
+  .page-header-content h1 {
+    font-size: 18px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  .stat-card {
+    padding: 14px;
+  }
+
+  .modern-table {
+    min-width: 700px;
+  }
+
+  .modern-badge {
+    font-size: 9px;
+    padding: 3px 7px;
+  }
+
+  .pagination-page {
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+  }
+}
+
+/* Tablet Landscape */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

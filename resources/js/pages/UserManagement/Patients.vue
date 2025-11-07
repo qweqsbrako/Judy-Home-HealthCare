@@ -2868,11 +2868,6 @@ onUnmounted(() => {
     justify-content: center;
   }
   
-  .stats-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-    padding: 0;
-  }
 
   .stat-card {
     padding: 18px;
