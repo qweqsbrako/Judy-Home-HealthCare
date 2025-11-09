@@ -92,19 +92,24 @@
           />
         </div>
         <div class="filters-group">
-          <select v-model="patientFilter" class="filter-select">
-            <option value="all">All Patients</option>
-            <option v-for="patient in patients" :key="patient.id" :value="patient.id">
-              {{ patient.first_name }} {{ patient.last_name }}
-            </option>
-          </select>
+          <div class="filter-wrapper">
+            <SearchableSelect
+              v-model="patientFilter"
+              :options="patientFilterOptions"
+              placeholder="All Patients"
+              class="filter-searchable"
+            />
+          </div>
           
-          <select v-model="nurseFilter" class="filter-select">
-            <option value="all">All Nurses</option>
-            <option v-for="nurse in nurses" :key="nurse.id" :value="nurse.id">
-              {{ nurse.first_name }} {{ nurse.last_name }}
-            </option>
-          </select>
+          <!-- Searchable Nurse Filter -->
+          <div class="filter-wrapper">
+            <SearchableSelect
+              v-model="nurseFilter"
+              :options="nurseFilterOptions"
+              placeholder="All Nurses"
+              class="filter-searchable"
+            />
+          </div>
           
           <select v-model="conditionFilter" class="filter-select">
             <option value="all">All Conditions</option>
@@ -217,7 +222,69 @@
               </tr>
             </tbody>
           </table>
+           <!-- Pagination Controls -->
+          <div v-if="totalPages > 1" class="pagination-container">
+            <div class="pagination-info">
+              Showing {{ ((currentPage - 1) * perPage) + 1 }} to {{ Math.min(currentPage * perPage, totalItems) }} of {{ totalItems }} assessments
+            </div>
+            
+            <div class="pagination-controls">
+              <button 
+                @click="prevPage" 
+                :disabled="currentPage === 1"
+                class="pagination-btn"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </button>
+              
+              <button
+                v-if="paginationPages[0] > 1"
+                @click="goToPage(1)"
+                class="pagination-page"
+              >
+                1
+              </button>
+              
+              <span v-if="paginationPages[0] > 2" class="pagination-ellipsis">...</span>
+              
+              <button
+                v-for="page in paginationPages"
+                :key="page"
+                @click="goToPage(page)"
+                :class="['pagination-page', { active: currentPage === page }]"
+              >
+                {{ page }}
+              </button>
+              
+              <span v-if="paginationPages[paginationPages.length - 1] < totalPages - 1" class="pagination-ellipsis">...</span>
+              
+              <button
+                v-if="paginationPages[paginationPages.length - 1] < totalPages"
+                @click="goToPage(totalPages)"
+                class="pagination-page"
+              >
+                {{ totalPages }}
+              </button>
+              
+              <button 
+                @click="nextPage" 
+                :disabled="currentPage === totalPages"
+                class="pagination-btn"
+              >
+                Next
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+      
         </div>
+
+        
 
         <!-- Empty State -->
         <div v-else class="empty-state">
@@ -262,7 +329,7 @@
                   <h3 class="form-section-title">👤 Patient Information</h3>
                 </div>
 
-                <div class="form-grid-full">
+                <div v-if="!isEditing" class="form-grid-full">
                   <label class="checkbox-label">
                     <input
                       type="checkbox"
@@ -279,7 +346,7 @@
                 </div>
 
                 <!-- Existing Patient Selection -->
-                <div v-if="!assessmentForm.is_new_patient" class="form-group form-grid-full">
+                <div v-if="!assessmentForm.is_new_patient && !isEditing" class="form-group form-grid-full">
                   <label>Select Existing Patient <span class="required">*</span></label>
                   <SearchableSelect
                     v-model="assessmentForm.patient_id"
@@ -290,7 +357,7 @@
                 </div>
 
                 <!-- New Patient Details -->
-                <template v-if="assessmentForm.is_new_patient">
+              <template v-if="assessmentForm.is_new_patient && !isEditing">
                   <div class="form-group">
                     <label>First Name <span class="required">*</span></label>
                     <input
@@ -305,6 +372,15 @@
                     <input
                       type="text"
                       v-model="assessmentForm.patient_last_name"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label>Email <span class="required">*</span></label>
+                    <input
+                      type="text"
+                      v-model="assessmentForm.patient_email"
                       required
                     />
                   </div>
@@ -349,12 +425,11 @@
                   </div>
 
                   <div class="form-group form-grid-full">
-                    <label>Ghana Card Number <span class="required">*</span></label>
+                    <label>Ghana Card Number</label>
                     <input
                       type="text"
                       v-model="assessmentForm.patient_ghana_card"
                       placeholder="GHA-123456789-1"
-                      required
                     />
                   </div>
                 </template>
@@ -1004,6 +1079,11 @@ const nurseFilter = ref('all')
 const conditionFilter = ref('all')
 const riskFilter = ref('all')
 
+const currentPage = ref(1)
+const perPage = ref(15)
+const totalPages = ref(0)
+const totalItems = ref(0)
+
 // Modal states
 const showAssessmentModal = ref(false)
 const showViewModal = ref(false)
@@ -1056,6 +1136,7 @@ const assessmentForm = ref({
   patient_id: '',
   patient_first_name: '',
   patient_last_name: '',
+  patient_email: '',
   patient_age: '',
   patient_gender: '',
   patient_date_of_birth: '',
@@ -1103,10 +1184,11 @@ const filteredAssessments = computed(() => {
       assessment.presenting_condition?.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       assessment.initial_nursing_impression?.toLowerCase().includes(searchQuery.value.toLowerCase())
     
-    const matchesPatient = patientFilter.value === 'all' || assessment.patient_id == patientFilter.value
-    const matchesNurse = nurseFilter.value === 'all' || assessment.nurse_id == nurseFilter.value
-    const matchesCondition = conditionFilter.value === 'all' || assessment.general_condition === conditionFilter.value
-    const matchesRisk = riskFilter.value === 'all' || assessment.risk_level === riskFilter.value
+    // Handle null/undefined/empty string as 'all'
+    const matchesPatient = !patientFilter.value || patientFilter.value === 'all' || assessment.patient_id == patientFilter.value
+    const matchesNurse = !nurseFilter.value || nurseFilter.value === 'all' || assessment.nurse_id == nurseFilter.value
+    const matchesCondition = !conditionFilter.value || conditionFilter.value === 'all' || assessment.general_condition === conditionFilter.value
+    const matchesRisk = !riskFilter.value || riskFilter.value === 'all' || assessment.risk_level === riskFilter.value
     
     return matchesSearch && matchesPatient && matchesNurse && matchesCondition && matchesRisk
   })
@@ -1155,7 +1237,9 @@ const loadMedicalAssessments = async () => {
       patient_id: patientFilter.value !== 'all' ? patientFilter.value : undefined,
       nurse_id: nurseFilter.value !== 'all' ? nurseFilter.value : undefined,
       condition: conditionFilter.value !== 'all' ? conditionFilter.value : undefined,
-      search: searchQuery.value || undefined
+      search: searchQuery.value || undefined,
+      page: currentPage.value,
+      per_page: perPage.value
     }
 
     Object.keys(filters).forEach(key => filters[key] === undefined && delete filters[key])
@@ -1169,6 +1253,14 @@ const loadMedicalAssessments = async () => {
       medicalAssessments.value.forEach(assessment => {
         assessment.risk_level = medicalAssessmentsService.calculateRiskLevel(assessment)
       })
+
+      // Update pagination info
+      if (data.pagination) {
+        currentPage.value = data.pagination.current_page
+        totalPages.value = data.pagination.last_page
+        totalItems.value = data.pagination.total
+        perPage.value = data.pagination.per_page
+      }
     }
   } catch (error) {
     console.error('Error loading medical assessments:', error)
@@ -1177,6 +1269,52 @@ const loadMedicalAssessments = async () => {
     loading.value = false
   }
 }
+
+
+const goToPage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+    loadMedicalAssessments()
+  }
+}
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+    loadMedicalAssessments()
+  }
+}
+
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+    loadMedicalAssessments()
+  }
+}
+
+const changePerPage = (newPerPage) => {
+  perPage.value = newPerPage
+  currentPage.value = 1
+  loadMedicalAssessments()
+}
+
+// Computed for pagination display
+const paginationPages = computed(() => {
+  const pages = []
+  const maxVisible = 5
+  let startPage = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let endPage = Math.min(totalPages.value, startPage + maxVisible - 1)
+  
+  if (endPage - startPage < maxVisible - 1) {
+    startPage = Math.max(1, endPage - maxVisible + 1)
+  }
+  
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i)
+  }
+  
+  return pages
+})
 
 const loadStatistics = async () => {
   try {
@@ -1201,6 +1339,26 @@ const loadStatistics = async () => {
     calculateStatisticsFromAssessments()
   }
 }
+
+const patientFilterOptions = computed(() => {
+  return [
+    { value: 'all', label: 'All Patients' },
+    ...patients.value.map(patient => ({
+      value: patient.id,
+      label: `${patient.first_name} ${patient.last_name}`
+    }))
+  ]
+})
+
+const nurseFilterOptions = computed(() => {
+  return [
+    { value: 'all', label: 'All Nurses' },
+    ...nurses.value.map(nurse => ({
+      value: nurse.id,
+      label: `${nurse.first_name} ${nurse.last_name}`
+    }))
+  ]
+})
 
 const calculateStatisticsFromAssessments = () => {
   if (!medicalAssessments.value || medicalAssessments.value.length === 0) {
@@ -1353,6 +1511,7 @@ const resetForm = () => {
     patient_id: '',
     patient_first_name: '',
     patient_last_name: '',
+    patient_email: '',
     patient_age: '',
     patient_gender: 'male',
     patient_date_of_birth: '',
@@ -1398,6 +1557,7 @@ const populateForm = (assessment) => {
     patient_id: assessment.patient_id,
     patient_first_name: assessment.patient?.first_name || '',
     patient_last_name: assessment.patient?.last_name || '',
+    patient_email: assessment.patient?.email || '',
     patient_age: calculateAge(assessment.patient?.date_of_birth) || '',
     patient_gender: assessment.patient?.gender || '',
     patient_date_of_birth: assessment.patient?.date_of_birth || '',
@@ -1468,6 +1628,7 @@ const saveAssessment = async () => {
         patient_first_name: assessmentForm.value.patient_first_name,
         patient_last_name: assessmentForm.value.patient_last_name,
         patient_age: assessmentForm.value.patient_age,
+        patient_email: assessmentForm.value.patient_email,
         patient_gender: assessmentForm.value.patient_gender,
         patient_date_of_birth: assessmentForm.value.patient_date_of_birth,
         patient_phone: assessmentForm.value.patient_phone,
@@ -1486,7 +1647,7 @@ const saveAssessment = async () => {
     
     if (response && response.success) {
       await loadMedicalAssessments()
-      await loadStatistics()
+      // await loadStatistics()
       closeAssessmentModal()
       toast.showSuccess(isEditing.value ? 'Medical assessment updated successfully!' : 'Medical assessment completed successfully!')
     } else {
@@ -1513,7 +1674,7 @@ const deleteAssessment = async () => {
     
     if (response && response.success) {
       await loadMedicalAssessments()
-      await loadStatistics()
+      // await loadStatistics()
       closeDeleteModal()
       toast.showSuccess('Medical assessment deleted successfully!')
     } else {
@@ -1572,7 +1733,7 @@ const handleClickOutside = (event) => {
 onMounted(async () => {
   await Promise.all([
     loadMedicalAssessments(),
-    loadStatistics(),
+    // loadStatistics(),
     loadPatients(),
     loadNurses()
   ])
@@ -1606,6 +1767,7 @@ watch(
       if (selectedPatient) {
         assessmentForm.value.patient_first_name = selectedPatient.first_name
         assessmentForm.value.patient_last_name = selectedPatient.last_name
+        assessmentForm.value.patient_email = selectedPatient.email
         assessmentForm.value.patient_age = calculateAge(selectedPatient.date_of_birth)
         assessmentForm.value.patient_gender = selectedPatient.gender
         assessmentForm.value.patient_date_of_birth = selectedPatient.date_of_birth
@@ -1623,6 +1785,7 @@ watch(
       assessmentForm.value.patient_id = ''
       assessmentForm.value.patient_first_name = ''
       assessmentForm.value.patient_last_name = ''
+      assessmentForm.value.patient_email = ''
       assessmentForm.value.patient_age = ''
       assessmentForm.value.patient_gender = 'male'
       assessmentForm.value.patient_date_of_birth = ''

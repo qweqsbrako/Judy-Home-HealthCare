@@ -86,7 +86,7 @@
           </svg>
           <input
             type="text"
-            placeholder="Search by name, phone, email..."
+            placeholder="Search by name, phone, email, vehicle number..."
             v-model="searchQuery"
             class="search-input"
           />
@@ -153,7 +153,7 @@
                 </td>
                 
                 <td>
-                  <span class="age-info">{{ driver.age }} years</span>
+                  <span class="age-info">{{ driver.age || 'N/A' }}</span>
                 </td>
                 
                 <td>
@@ -255,6 +255,20 @@
                         </svg>
                         Reactivate Driver
                       </button>
+
+                       <div class="dropdown-divider"></div>
+
+                       <button
+                          @click="openDeleteModal(vehicle)"
+                          class="dropdown-item-modern danger"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete Vehicle
+                        </button>
+
+
                     </div>
                   </div>
                 </td>
@@ -356,8 +370,8 @@
                 </div>
                 
                 <div class="form-group">
-                  <label>Date of Birth <span class="required">*</span></label>
-                  <input type="date" v-model="driverForm.date_of_birth" required />
+                  <label>Date of Birth</label>
+                  <input type="date" v-model="driverForm.date_of_birth"  />
                 </div>
                 
                 <div class="form-group">
@@ -408,6 +422,78 @@
           </form>
         </div>
       </div>
+
+
+
+      <!-- Delete Driver Modal -->
+      <div v-if="showDeleteModal && currentDriver" class="modal-overlay" @click.self="closeDeleteModal">
+        <div class="modal modal-sm">
+          <div class="modal-header modal-header-danger">
+            <h3 class="modal-title">Delete Driver</h3>
+            <button @click="closeDeleteModal" class="modal-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div class="modal-body">
+            <div class="delete-warning-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            
+            <h4 class="delete-title">Are you sure?</h4>
+            <p class="delete-message">
+              You are about to permanently delete <strong>{{ currentDriver.full_name }}</strong>. 
+              This action cannot be undone.
+            </p>
+            
+            <div v-if="currentDriver.current_vehicle" class="warning-note">
+              <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <p><strong>Warning:</strong> This driver currently has a vehicle assigned ({{ currentDriver.current_vehicle.registration_number }}). The vehicle will be unassigned upon deletion.</p>
+              </div>
+            </div>
+            
+            <div class="driver-info-box">
+              <div class="info-row">
+                <span class="info-label">Name:</span>
+                <span class="info-value">{{ currentDriver.full_name }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Phone:</span>
+                <span class="info-value">{{ currentDriver.phone }}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Total Trips:</span>
+                <span class="info-value">{{ currentDriver.total_trips || 0 }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" @click="closeDeleteModal" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button
+              @click="deleteDriver"
+              :disabled="isDeleting"
+              class="btn btn-danger"
+            >
+              <div v-if="isDeleting" class="spinner spinner-sm"></div>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 16px; height: 16px;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Permanently
+            </button>
+          </div>
+        </div>
+      </div>
+
 
       <!-- View Driver Modal -->
       <div v-if="showViewModal && currentDriver" class="modal-overlay" @click.self="closeViewModal">
@@ -795,6 +881,8 @@ const searchQuery = ref('')
 const activeFilter = ref('all')
 const suspendedFilter = ref('all')
 const vehicleAssignedFilter = ref('all')
+const showDeleteModal = ref(false)
+const isDeleting = ref(false)
 
 // Modal states
 const showDriverModal = ref(false)
@@ -928,6 +1016,33 @@ const loadDrivers = async (page = 1) => {
     drivers.value = { data: [], total: 0, current_page: 1, last_page: 1, per_page: 15 }
   }
   loading.value = false
+}
+
+const openDeleteModal = (driver) => {
+  currentDriver.value = driver
+  showDeleteModal.value = true
+  activeDropdown.value = null
+}
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false
+  currentDriver.value = null
+}
+
+const deleteDriver = async () => {
+  isDeleting.value = true
+  
+  try {
+    await driverService.deleteDriver(currentDriver.value.id)
+    await Promise.all([loadDrivers(drivers.value.current_page), getStatistics()])
+    closeDeleteModal()
+    toast.showSuccess('Driver deleted successfully!')
+  } catch (error) {
+    console.error('Error deleting driver:', error)
+    toast.showError(error.message || 'Failed to delete driver')
+  }
+  
+  isDeleting.value = false
 }
 
 const loadAvailableVehicles = async () => {
@@ -3315,6 +3430,75 @@ onUnmounted(() => {
     height: 32px;
     font-size: 11px;
   }
+}
+
+.delete-warning-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  background: #fef2f2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-warning-icon svg {
+  width: 32px;
+  height: 32px;
+  color: #ef4444;
+}
+
+.delete-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+  text-align: center;
+}
+
+.delete-message {
+  font-size: 15px;
+  color: #64748b;
+  line-height: 1.6;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.delete-message strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.driver-info-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 500;
 }
 
 /* Tablet Landscape */

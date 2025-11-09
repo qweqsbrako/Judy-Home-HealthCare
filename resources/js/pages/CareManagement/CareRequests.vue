@@ -8,6 +8,14 @@
           <p>Manage home care assessment requests and assignments</p>
         </div>
         <div class="page-header-actions">
+
+          <button @click="openCreateRequestModal" class="btn-modern btn-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Create Care Request
+          </button>
+
           <button @click="exportCareRequests" class="btn-modern btn-secondary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -237,19 +245,29 @@
                         View Details
                       </button>
                       
+                      
                       <button v-if="request.status === 'payment_received'" @click="openAssignNurseModal(request)" class="dropdown-item-modern success">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                         </svg>
                         Assign Nurse
                       </button>
+
+                      <button @click="openChangeStatusModal(request)" class="dropdown-item-modern">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                        </svg>
+                        Change Status
+                      </button>
                       
-                      <button v-if="request.status === 'nurse_assigned' || request.status === 'assessment_scheduled'" @click="openScheduleAssessmentModal(request)" class="dropdown-item-modern">
+                      <!-- <button v-if="request.status === 'nurse_assigned' || request.status === 'assessment_scheduled'" @click="openScheduleAssessmentModal(request)" class="dropdown-item-modern">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                         Schedule Assessment
-                      </button>
+                      </button> -->
+
+                      
                       
                       <button v-if="request.status === 'under_review' || request.status === 'assessment_completed'" @click="openIssueCareCostModal(request)" class="dropdown-item-modern success">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -450,37 +468,66 @@
                 <!-- Payment Information -->
                 <div class="details-group">
                   <h4 class="details-header">Payment Information</h4>
-                  <div class="payment-details">
-                    <div v-if="selectedRequest.assessment_payment" class="payment-detail-item">
-                      <div class="payment-detail-header">
-                        <span class="payment-type">Assessment Fee</span>
-                        <span :class="'payment-badge ' + getPaymentStatusClass(selectedRequest.assessment_payment.status)">
-                          {{ formatPaymentStatus(selectedRequest.assessment_payment.status) }}
-                        </span>
-                      </div>
-                      <div class="payment-amount">{{ selectedRequest.assessment_payment.currency }} {{ selectedRequest.assessment_payment.total_amount }}</div>
-                      <div v-if="selectedRequest.assessment_payment.reference_number" class="payment-ref">
-                        Ref: {{ selectedRequest.assessment_payment.reference_number }}
-                      </div>
-                    </div>
+                      <div class="payment-details">
+                        <div v-if="selectedRequest.assessment_payment" class="payment-detail-item">
+                          <div class="payment-detail-header">
+                            <span class="payment-type">Assessment Fee</span>
+                            <span :class="'payment-badge ' + getPaymentStatusClass(selectedRequest.assessment_payment.status)">
+                              {{ formatPaymentStatus(selectedRequest.assessment_payment.status) }}
+                            </span>
+                          </div>
+                          <div class="payment-amount">{{ selectedRequest.assessment_payment.currency }} {{ selectedRequest.assessment_payment.total_amount }}</div>
+                          <div v-if="selectedRequest.assessment_payment.reference_number" class="payment-ref">
+                            Ref: {{ selectedRequest.assessment_payment.reference_number }}
+                          </div>
+                          <div v-if="selectedRequest.assessment_payment.transaction_id" class="payment-ref">
+                            Transaction: {{ selectedRequest.assessment_payment.transaction_id }}
+                          </div>
+                          <!-- Show if admin created -->
+                          <div v-if="selectedRequest.assessment_payment.payment_provider === 'admin_created'" class="payment-admin-badge">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px;">
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Admin Recorded Payment
+                          </div>
+                          <div v-if="selectedRequest.assessment_payment.paid_at" class="payment-date">
+                            Paid: {{ formatDateTime(selectedRequest.assessment_payment.paid_at) }}
+                          </div>
+                        </div>
 
-                    <div v-if="selectedRequest.care_payment" class="payment-detail-item">
-                      <div class="payment-detail-header">
-                        <span class="payment-type">Care Fee</span>
-                        <span :class="'payment-badge ' + getPaymentStatusClass(selectedRequest.care_payment.status)">
-                          {{ formatPaymentStatus(selectedRequest.care_payment.status) }}
-                        </span>
-                      </div>
-                      <div class="payment-amount">{{ selectedRequest.care_payment.currency }} {{ selectedRequest.care_payment.total_amount }}</div>
-                      <div v-if="selectedRequest.care_payment.description" class="payment-description">
-                        {{ selectedRequest.care_payment.description }}
-                      </div>
-                    </div>
+                        <div v-if="selectedRequest.care_payment" class="payment-detail-item">
+                          <div class="payment-detail-header">
+                            <span class="payment-type">Care Fee</span>
+                            <span :class="'payment-badge ' + getPaymentStatusClass(selectedRequest.care_payment.status)">
+                              {{ formatPaymentStatus(selectedRequest.care_payment.status) }}
+                            </span>
+                          </div>
+                          <div class="payment-amount">{{ selectedRequest.care_payment.currency }} {{ selectedRequest.care_payment.total_amount }}</div>
+                          <div v-if="selectedRequest.care_payment.reference_number" class="payment-ref">
+                            Ref: {{ selectedRequest.care_payment.reference_number }}
+                          </div>
+                          <div v-if="selectedRequest.care_payment.transaction_id" class="payment-ref">
+                            Transaction: {{ selectedRequest.care_payment.transaction_id }}
+                          </div>
+                          <!-- Show if admin created -->
+                          <div v-if="selectedRequest.care_payment.payment_provider === 'admin_created'" class="payment-admin-badge">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 14px; height: 14px;">
+                              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            Admin Recorded Payment
+                          </div>
+                          <div v-if="selectedRequest.care_payment.description" class="payment-description">
+                            {{ selectedRequest.care_payment.description }}
+                          </div>
+                          <div v-if="selectedRequest.care_payment.paid_at" class="payment-date">
+                            Paid: {{ formatDateTime(selectedRequest.care_payment.paid_at) }}
+                          </div>
+                        </div>
 
-                    <div v-if="!selectedRequest.assessment_payment && !selectedRequest.care_payment" class="no-payment-info">
-                      No payment information available
-                    </div>
-                  </div>
+                        <div v-if="!selectedRequest.assessment_payment && !selectedRequest.care_payment" class="no-payment-info">
+                          No payment information available
+                        </div>
+                      </div>
                 </div>
 
                 <!-- Timeline -->
@@ -532,11 +579,431 @@
         </div>
       </div>
 
+      <!-- Change Status Modal - UPDATED with Care Payment Amount -->
+<div v-if="showChangeStatusModal && actioningRequest" class="modal-overlay" @click.self="closeChangeStatusModal">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h3 class="modal-title">Change Request Status</h3>
+      <button @click="closeChangeStatusModal" class="modal-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    
+    <form @submit.prevent="changeStatus">
+      <div class="modal-body">
+        <div class="status-info-card">
+          <div class="status-info-row">
+            <span class="status-info-label">Current Status:</span>
+            <span :class="'modern-badge ' + getStatusBadgeClass(actioningRequest.status)">
+              {{ formatStatus(actioningRequest.status) }}
+            </span>
+          </div>
+          <div class="status-info-row">
+            <span class="status-info-label">Request ID:</span>
+            <span class="status-info-value">#{{ actioningRequest.id }}</span>
+          </div>
+          <div class="status-info-row">
+            <span class="status-info-label">Patient:</span>
+            <span class="status-info-value">
+              {{ actioningRequest.patient?.first_name }} {{ actioningRequest.patient?.last_name }}
+            </span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 20px;">
+          <label>New Status <span class="required">*</span></label>
+          <select v-model="changeStatusForm.new_status" required>
+            <option value="">Select new status</option>
+            <option value="pending_payment">Pending Payment</option>
+            <option value="payment_received">Payment Received</option>
+            <option value="nurse_assigned">Nurse Assigned</option>
+            <option value="assessment_scheduled">Assessment Scheduled</option>
+            <option value="assessment_completed">Assessment Completed</option>
+            <option value="under_review">Under Review</option>
+            <option value="care_plan_created">Care Plan Created</option>
+            <option value="awaiting_care_payment">Awaiting Care Payment</option>
+            <option value="care_payment_received">Care Payment Received</option>
+            <option value="care_active">Care Active</option>
+            <option value="care_completed">Care Completed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+
+        <!-- Payment Method Selection -->
+        <div v-if="statusChangeRequiresPaymentMethod" class="form-group">
+          <label>Payment Method <span class="required">*</span></label>
+          <select v-model="changeStatusForm.payment_method" required>
+            <option value="">Select payment method</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="card">Card Payment</option>
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="cash">Cash</option>
+            <option value="insurance">Insurance</option>
+          </select>
+          <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+            Select how the patient paid for this service
+          </p>
+        </div>
+
+        <!-- Care Payment Amount Field (SIMPLIFIED - No Tax) -->
+        <div v-if="statusChangeRequiresCareAmount" class="form-group">
+          <label>Care Service Fee (GHS) <span class="required">*</span></label>
+          <input 
+            v-model.number="changeStatusForm.care_amount" 
+            type="number" 
+            step="0.01"
+            min="0"
+            placeholder="Enter total care service fee"
+            required
+          />
+          <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+            Enter the total care service fee amount
+          </p>
+        </div>
+
+        <!-- Assessment Date/Time if changing to assessment_scheduled -->
+        <div v-if="changeStatusForm.new_status === 'assessment_scheduled'" class="form-group">
+          <label>Assessment Date & Time <span class="required">*</span></label>
+          <input 
+            v-model="changeStatusForm.assessment_scheduled_at" 
+            type="datetime-local" 
+            :min="getMinDateTime()"
+            required 
+          />
+          <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+            Specify when the home assessment is scheduled
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label>Reason/Notes <span class="required">*</span></label>
+          <textarea 
+            v-model="changeStatusForm.reason" 
+            rows="4" 
+            placeholder="Please provide a reason for this status change..." 
+            required
+          ></textarea>
+          <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+            This will be recorded in the request history
+          </p>
+        </div>
+
+        <div v-if="shouldShowWarning" class="warning-card">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          <div>
+            <strong>Warning</strong>
+            <p>Changing to this status may affect the care request workflow. Please ensure this is intentional.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" @click="closeChangeStatusModal" class="btn btn-secondary">Cancel</button>
+        <button 
+          type="submit" 
+          :disabled="saving || !changeStatusForm.new_status || !changeStatusForm.reason || !isStatusChangeFormValid" 
+          class="btn btn-primary"
+        >
+          <div v-if="saving" class="spinner spinner-sm"></div>
+          Update Status
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+      <!-- Create Care Request Modal -->
+<!-- Create Care Request Modal - UPDATED -->
+<div v-if="showCreateRequestModal" class="modal-overlay" @click.self="closeCreateRequestModal">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <h3 class="modal-title">Create Care Request</h3>
+      <button @click="closeCreateRequestModal" class="modal-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    
+    <form @submit.prevent="createCareRequest">
+      <div class="modal-body">
+        <!-- Patient Selection Section -->
+        <div class="form-section">
+          <h4 class="form-section-title">Patient Information</h4>
+          <div class="form-grid">
+            <div class="form-group form-grid-full">
+              <label>Select Patient <span class="required">*</span></label>
+              <SearchableSelect
+                v-model="createRequestForm.patient_id"
+                :options="patientOptions"
+                placeholder="Search and select patient"
+                @update:modelValue="onPatientSelected"
+              />
+              <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                Start typing patient name, phone, or email to search
+              </p>
+            </div>
+          </div>
+
+          <!-- Display selected patient info -->
+          <!-- <div v-if="selectedPatientInfo" class="selected-patient-card">
+            <div class="patient-info-header">
+              <img :src="selectedPatientInfo.avatar_url || generateAvatar(selectedPatientInfo)" :alt="selectedPatientInfo.first_name" class="patient-avatar" />
+              <div>
+                <div class="patient-name">{{ selectedPatientInfo.first_name }} {{ selectedPatientInfo.last_name }}</div>
+                <div class="patient-contact">{{ selectedPatientInfo.phone }} • {{ selectedPatientInfo.email }}</div>
+              </div>
+            </div>
+          </div> -->
+        </div>
+
+        <!-- ADD THIS NEW SECTION: Initial Status -->
+        <div class="form-section">
+          <h4 class="form-section-title">Initial Status</h4>
+          <div class="form-grid">
+            <div class="form-group form-grid-full">
+              <label>Set Initial Status <span class="required">*</span></label>
+              <select v-model="createRequestForm.initial_status" required>
+                <option value="pending_payment">Pending Payment (Default)</option>
+                <option value="payment_received">Payment Received</option>
+                <option value="nurse_assigned">Nurse Assigned</option>
+                <option value="assessment_scheduled">Assessment Scheduled</option>
+                <option value="assessment_completed">Assessment Completed</option>
+                <option value="under_review">Under Review</option>
+                <option value="care_plan_created">Care Plan Created</option>
+                <option value="awaiting_care_payment">Awaiting Care Payment</option>
+                <option value="care_payment_received">Care Payment Received</option>
+                <option value="care_active">Care Active</option>
+              </select>
+              <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                Select the initial status for this care request. This determines the notification sent to the patient.
+              </p>
+            </div>
+
+            <div v-if="requiresPaymentMethod" class="form-group form-grid-full">
+              <label>Payment Method <span class="required">*</span></label>
+              <select v-model="createRequestForm.payment_method" required>
+                <option value="">Select payment method</option>
+                <option value="mobile_money">Mobile Money</option>
+                <option value="card">Card Payment</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="cash">Cash</option>
+                <option value="insurance">Insurance</option>
+              </select>
+              <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                Select how the patient paid for this service
+              </p>
+            </div>
+
+              <div v-if="createRequestForm.initial_status === 'assessment_scheduled'" class="form-group form-grid-full">
+              <label>Assessment Date & Time <span class="required">*</span></label>
+              <input 
+                v-model="createRequestForm.assessment_scheduled_at" 
+                type="datetime-local" 
+                :min="getMinDateTime()"
+                required 
+              />
+              <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                Specify when the home assessment is scheduled
+              </p>
+            </div>
+
+            <div v-if="createRequestRequiresCareAmount" class="form-group form-grid-full">
+            <label>Care Service Fee (GHS) <span class="required">*</span></label>
+            <input 
+              v-model="createCareAmountDisplay" 
+              type="text" 
+              placeholder="Enter total care service fee (e.g., 1,000.00)"
+              @input="handleCreateCareAmountInput"
+              @blur="formatCreateCareAmountDisplay"
+              required
+            />
+            <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+              Enter the total care service fee amount (commas allowed)
+            </p>
+          </div>
+            <!-- Show status description -->
+            <div v-if="createRequestForm.initial_status" class="status-description-card">
+              <div class="status-description-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <div class="status-description-text">
+                <strong>{{ getStatusDescription(createRequestForm.initial_status).title }}</strong>
+                <p>{{ getStatusDescription(createRequestForm.initial_status).description }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Care Details Section -->
+        <div class="form-section">
+          <h4 class="form-section-title">Care Details</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Care Type <span class="required">*</span></label>
+              <select v-model="createRequestForm.care_type" required>
+                <option value="">Select care type</option>
+                <option value="general_nursing">General Nursing</option>
+                <option value="elderly_care">Elderly Care</option>
+                <option value="post_surgical">Post-Surgical Care</option>
+                <option value="chronic_disease">Chronic Disease Management</option>
+                <option value="palliative_care">Palliative Care</option>
+                <option value="rehabilitation">Rehabilitation</option>
+                <option value="wound_care">Wound Care</option>
+                <option value="medication_management">Medication Management</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Urgency Level <span class="required">*</span></label>
+              <select v-model="createRequestForm.urgency_level" required>
+                <option value="routine">Routine</option>
+                <option value="urgent">Urgent</option>
+                <option value="emergency">Emergency</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Preferred Start Date</label>
+              <input v-model="createRequestForm.preferred_start_date" type="date" :min="getTodayDate()" />
+            </div>
+
+            <div class="form-group">
+              <label>Preferred Time</label>
+              <select v-model="createRequestForm.preferred_time">
+                <option value="">Any time</option>
+                <option value="morning">Morning (6AM - 12PM)</option>
+                <option value="afternoon">Afternoon (12PM - 6PM)</option>
+                <option value="evening">Evening (6PM - 10PM)</option>
+                <option value="night">Night (10PM - 6AM)</option>
+                <option value="anytime">Anytime</option>
+              </select>
+            </div>
+
+            <div class="form-group form-grid-full">
+              <label>Description <span class="required">*</span></label>
+              <textarea 
+                v-model="createRequestForm.description" 
+                rows="4" 
+                placeholder="Describe the patient's condition and care needs..." 
+                minlength="20"
+                maxlength="1000"
+                required
+              ></textarea>
+              <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                Minimum 20 characters. {{ createRequestForm.description.length }}/1000
+              </p>
+            </div>
+
+            <div class="form-group form-grid-full">
+              <label>Special Requirements</label>
+              <textarea 
+                v-model="createRequestForm.special_requirements" 
+                rows="3" 
+                placeholder="Any special requirements or considerations..."
+                maxlength="500"
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Preferred Language</label>
+              <input v-model="createRequestForm.preferred_language" type="text" placeholder="e.g., English, Twi, Ga" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Location Section -->
+        <div class="form-section">
+          <h4 class="form-section-title">Service Location</h4>
+          <div class="form-grid">
+            <div class="form-group form-grid-full">
+              <label>Service Address <span class="required">*</span></label>
+              <textarea 
+                v-model="createRequestForm.service_address" 
+                rows="2" 
+                placeholder="Full service address..."
+                required
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>City</label>
+              <input v-model="createRequestForm.city" type="text" placeholder="City" />
+            </div>
+
+            <div class="form-group">
+              <label>Region</label>
+              <select v-model="createRequestForm.region">
+                <option value="">Select region</option>
+                <option value="Greater Accra">Greater Accra</option>
+                <option value="Ashanti">Ashanti</option>
+                <option value="Central">Central</option>
+                <option value="Eastern">Eastern</option>
+                <option value="Northern">Northern</option>
+                <option value="Western">Western</option>
+                <option value="Volta">Volta</option>
+                <option value="Upper East">Upper East</option>
+                <option value="Upper West">Upper West</option>
+                <option value="Bono">Bono</option>
+                <option value="Bono East">Bono East</option>
+                <option value="Ahafo">Ahafo</option>
+                <option value="Savannah">Savannah</option>
+                <option value="North East">North East</option>
+                <option value="Oti">Oti</option>
+                <option value="Western North">Western North</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Latitude (Optional)</label>
+              <input v-model.number="createRequestForm.latitude" type="number" step="0.000001" placeholder="e.g., 5.6037" />
+            </div>
+
+            <div class="form-group">
+              <label>Longitude (Optional)</label>
+              <input v-model.number="createRequestForm.longitude" type="number" step="0.000001" placeholder="e.g., -0.1870" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Notes Section -->
+        <div class="form-section">
+          <h4 class="form-section-title">Admin Notes (Optional)</h4>
+          <div class="form-grid">
+            <div class="form-group form-grid-full">
+              <label>Internal Notes</label>
+              <textarea 
+                v-model="createRequestForm.admin_notes" 
+                rows="3" 
+                placeholder="Internal notes (not visible to patient)..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" @click="closeCreateRequestModal" class="btn btn-secondary">Cancel</button>
+        <button type="submit" :disabled="saving || !createRequestForm.patient_id" class="btn btn-primary">
+          <div v-if="saving" class="spinner spinner-sm"></div>
+          Create Care Request
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
       <!-- Assign Nurse Modal -->
       <div v-if="showAssignNurseModal && actioningRequest" class="modal-overlay" @click.self="closeAssignNurseModal">
         <div class="modal modal-md">
           <div class="modal-header">
-            <h3 class="modal-title">Assign Nurse</h3>
+            <h3 class="modal-title">Assign Nurse & Schedule Assessment</h3>
             <button @click="closeAssignNurseModal" class="modal-close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -554,13 +1021,26 @@
                   placeholder="Select a nurse"
                 />
               </div>
+
+              <div class="form-group" style="margin-top: 20px;">
+                <label>Assessment Date & Time <span class="required">*</span></label>
+                <input 
+                  v-model="assignNurseForm.scheduled_at" 
+                  type="datetime-local" 
+                  :min="getMinDateTime()"
+                  required 
+                />
+                <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                  Schedule the home assessment visit
+                </p>
+              </div>
             </div>
 
             <div class="modal-actions">
               <button type="button" @click="closeAssignNurseModal" class="btn btn-secondary">Cancel</button>
-              <button type="submit" :disabled="saving" class="btn btn-primary">
+              <button type="submit" :disabled="saving || !assignNurseForm.nurse_id || !assignNurseForm.scheduled_at" class="btn btn-primary">
                 <div v-if="saving" class="spinner spinner-sm"></div>
-                Assign Nurse
+                Assign & Schedule
               </button>
             </div>
           </form>
@@ -732,6 +1212,12 @@ const statusFilter = ref('all')
 const careTypeFilter = ref('all')
 const urgencyFilter = ref('all')
 const activeDropdown = ref(null)
+const careAmountDisplay = ref('')
+
+const showCreateRequestModal = ref(false)
+const patients = ref([])
+const selectedPatientInfo = ref(null)
+const createCareAmountDisplay = ref('')
 
 // Pagination
 const currentPage = ref(1)
@@ -763,12 +1249,265 @@ const nurses = ref([])
 
 // Forms
 const assignNurseForm = ref({
-  nurse_id: ''
+  nurse_id: '',
+  scheduled_at: ''
 })
+
+const showChangeStatusModal = ref(false)
+
+const changeStatusForm = ref({
+  new_status: '',
+  payment_method: '', 
+  care_amount: null,
+  assessment_scheduled_at: '',
+  reason: ''
+})
+
+const handleCreateCareAmountInput = (event) => {
+  const input = event.target.value
+  const cleanValue = removeCommas(input)
+  const sanitized = cleanValue.replace(/[^\d.]/g, '')
+  
+  const parts = sanitized.split('.')
+  if (parts.length > 2) {
+    const formatted = parts[0] + '.' + parts.slice(1).join('')
+    createCareAmountDisplay.value = formatted
+    createRequestForm.value.care_amount = parseFloat(formatted) || null
+  } else {
+    createCareAmountDisplay.value = sanitized
+    createRequestForm.value.care_amount = parseFloat(sanitized) || null
+  }
+}
+
+const formatCreateCareAmountDisplay = () => {
+  if (createRequestForm.value.care_amount) {
+    const value = createRequestForm.value.care_amount.toString()
+    createCareAmountDisplay.value = addCommas(value)
+  }
+}
+
+
+const removeCommas = (value) => {
+  if (!value) return ''
+  return value.toString().replace(/,/g, '')
+}
+
+
+
+// Helper function to add commas to number
+const addCommas = (value) => {
+  if (!value) return ''
+  const parts = value.toString().split('.')
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return parts.join('.')
+}
+
+const handleCareAmountInput = (event) => {
+  const input = event.target.value
+  
+  // Remove commas and validate
+  const cleanValue = removeCommas(input)
+  
+  // Only allow numbers and decimal point
+  const sanitized = cleanValue.replace(/[^\d.]/g, '')
+  
+  // Ensure only one decimal point
+  const parts = sanitized.split('.')
+  if (parts.length > 2) {
+    const formatted = parts[0] + '.' + parts.slice(1).join('')
+    careAmountDisplay.value = formatted
+    changeStatusForm.value.care_amount = parseFloat(formatted) || null
+  } else {
+    careAmountDisplay.value = sanitized
+    changeStatusForm.value.care_amount = parseFloat(sanitized) || null
+  }
+}
+
+const formatCareAmountDisplay = () => {
+  if (changeStatusForm.value.care_amount) {
+    const value = changeStatusForm.value.care_amount.toString()
+    careAmountDisplay.value = addCommas(value)
+  }
+}
+
+
+
+// Update the computed property to properly show payment method for care payments
+const statusChangeRequiresPaymentMethod = computed(() => {
+  if (!changeStatusForm.value.new_status || !actioningRequest.value) return false
+  
+  const assessmentPaymentStatuses = [
+    'payment_received',
+    'nurse_assigned',
+    'assessment_scheduled',
+    'assessment_completed',
+    'under_review'
+  ]
+  
+  const carePaymentStatuses = [
+    'care_payment_received',
+    'care_active'
+  ]
+  
+  const newStatus = changeStatusForm.value.new_status
+  const currentStatus = actioningRequest.value.status
+  
+  // Show payment method for assessment payment statuses
+  // (only if moving forward from pending_payment or earlier)
+  if (assessmentPaymentStatuses.includes(newStatus)) {
+    const earlyStatuses = ['pending_payment']
+    return earlyStatuses.includes(currentStatus)
+  }
+  
+  // ALWAYS show payment method for care payment statuses
+  // (unless already at care_active or care_completed)
+  if (carePaymentStatuses.includes(newStatus)) {
+    return !['care_active', 'care_completed'].includes(currentStatus)
+  }
+  
+  return false
+})
+
+const statusChangeRequiresCareAmount = computed(() => {
+  if (!changeStatusForm.value.new_status) return false
+  
+  const carePaymentStatuses = [
+    'care_payment_received',
+    'care_active'
+  ]
+  
+  const currentStatus = actioningRequest.value?.status
+  
+  // Show care amount field for care payment statuses
+  // (unless already at care_active or care_completed)
+  if (carePaymentStatuses.includes(changeStatusForm.value.new_status)) {
+    return !['care_active', 'care_completed'].includes(currentStatus)
+  }
+  
+  return false
+})
+
+
+const isStatusChangeFormValid = computed(() => {
+  // Check if payment method is required and provided
+  if (statusChangeRequiresPaymentMethod.value && !changeStatusForm.value.payment_method) {
+    return false
+  }
+  
+  // Check if care amount is required and provided (check the actual number, not display)
+  if (statusChangeRequiresCareAmount.value && (!changeStatusForm.value.care_amount || changeStatusForm.value.care_amount <= 0)) {
+    return false
+  }
+  
+  // Check if assessment date is required and provided
+  if (changeStatusForm.value.new_status === 'assessment_scheduled' && !changeStatusForm.value.assessment_scheduled_at) {
+    return false
+  }
+  
+  return true
+})
+
+
+// Computed property to show warning for certain status changes
+const shouldShowWarning = computed(() => {
+  if (!changeStatusForm.value.new_status || !actioningRequest.value) return false
+  
+  const warningStatuses = ['cancelled', 'rejected', 'pending_payment']
+  return warningStatuses.includes(changeStatusForm.value.new_status)
+})
+
+// Open change status modal
+const openChangeStatusModal = (request) => {
+  actioningRequest.value = request
+  changeStatusForm.value = {
+    new_status: '',
+    payment_method: '',
+    care_amount: null,
+    assessment_scheduled_at: '',
+    reason: ''
+  }
+  careAmountDisplay.value = '' 
+  showChangeStatusModal.value = true
+  activeDropdown.value = null
+}
+
+// Close change status modal
+const closeChangeStatusModal = () => {
+  showChangeStatusModal.value = false
+  actioningRequest.value = null
+  changeStatusForm.value = {
+    new_status: '',
+    payment_method: '',
+    care_amount: null,
+    assessment_scheduled_at: '',
+    reason: ''
+  }
+  careAmountDisplay.value = ''
+}
+
+// Change status function
+const changeStatus = async () => {
+  if (!actioningRequest.value) return
+  
+  // Validate payment method if required
+  if (statusChangeRequiresPaymentMethod.value && !changeStatusForm.value.payment_method) {
+    toast.showError('Please select a payment method')
+    return
+  }
+  
+  // Validate care amount if required
+  if (statusChangeRequiresCareAmount.value && (!changeStatusForm.value.care_amount || changeStatusForm.value.care_amount <= 0)) {
+    toast.showError('Please enter a valid care service fee amount')
+    return
+  }
+  
+  // Validate assessment date if required
+  if (changeStatusForm.value.new_status === 'assessment_scheduled' && !changeStatusForm.value.assessment_scheduled_at) {
+    toast.showError('Please provide assessment date and time')
+    return
+  }
+  
+  // Confirm if changing to terminal states
+  if (['cancelled', 'rejected'].includes(changeStatusForm.value.new_status)) {
+    const confirmed = confirm(`Are you sure you want to change the status to "${formatStatus(changeStatusForm.value.new_status)}"? This action may not be reversible.`)
+    if (!confirmed) return
+  }
+  
+  saving.value = true
+  try {
+    // Prepare data with clean numeric value (no commas)
+    const submitData = {
+      ...changeStatusForm.value,
+      care_amount: changeStatusForm.value.care_amount // Already a clean number
+    }
+    
+    const response = await careRequestsService.updateStatus(
+      actioningRequest.value.id,
+      submitData
+    )
+    
+    if (response.success) {
+      await loadCareRequests(currentPage.value)
+      await loadStatistics()
+      closeChangeStatusModal()
+      toast.showSuccess('Status updated successfully!')
+    }
+  } catch (error) {
+    toast.showError(error.message || 'Failed to update status')
+  }
+  saving.value = false
+}
 
 const scheduleForm = ref({
   scheduled_at: ''
 })
+
+const getMinDateTime = () => {
+  const now = new Date()
+  now.setHours(now.getHours() + 1)
+  now.setMinutes(0)
+  return now.toISOString().slice(0, 16)
+}
 
 const careCostForm = ref({
   amount: null,
@@ -841,6 +1580,215 @@ const loadNurses = async () => {
   }
 }
 
+
+
+const createRequestForm = ref({
+  patient_id: '',
+  initial_status: 'pending_payment',
+  assessment_scheduled_at: '',
+  care_type: '',
+  payment_method: '',
+  urgency_level: 'routine',
+  description: '',
+  special_requirements: '',
+  preferred_language: '',
+  preferred_start_date: '',
+  preferred_time: '',
+  service_address: '',
+  city: '',
+  region: '',
+  latitude: null,
+  longitude: null,
+  admin_notes: ''
+})
+
+const requiresPaymentMethod = computed(() => {
+  const completedPaymentStatuses = [
+    'payment_received',
+    'nurse_assigned',
+    'assessment_scheduled',
+    'assessment_completed',
+    'under_review',
+    'care_payment_received',
+    'care_active'
+  ]
+  
+  return completedPaymentStatuses.includes(createRequestForm.value.initial_status)
+})
+
+
+const isFormValid = computed(() => {
+  // If assessment_scheduled is selected, assessment_scheduled_at is required
+  if (createRequestForm.value.initial_status === 'assessment_scheduled') {
+    if (!createRequestForm.value.assessment_scheduled_at) {
+      return false
+    }
+  }
+  
+  // If status requires completed payment, payment_method is required
+  if (requiresPaymentMethod.value && !createRequestForm.value.payment_method) {
+    return false
+  }
+  
+  return true
+})
+
+const getStatusDescription = (status) => {
+  const descriptions = {
+    'pending_payment': {
+      title: 'Pending Payment',
+      description: 'Patient will be notified to pay the assessment fee. Payment link will be included in the notification.'
+    },
+    'payment_received': {
+      title: 'Payment Received',
+      description: 'Patient will be notified that their payment was received and a nurse will be assigned soon.'
+    },
+    'nurse_assigned': {
+      title: 'Nurse Assigned',
+      description: 'Patient will be notified about the assigned nurse and that assessment will be scheduled.'
+    },
+    'assessment_scheduled': {
+      title: 'Assessment Scheduled',
+      description: 'Patient will be notified about the scheduled assessment date, time, and location. You must provide the assessment date and time.'
+    },
+    'assessment_completed': {
+      title: 'Assessment Completed',
+      description: 'Patient will be notified that the assessment is complete and under review.'
+    },
+    'under_review': {
+      title: 'Under Review',
+      description: 'Patient will be notified that their assessment is being reviewed by the care team.'
+    },
+    'care_plan_created': {
+      title: 'Care Plan Created',
+      description: 'Patient will be notified that their personalized care plan is ready and they need to pay the care fee.'
+    },
+    'awaiting_care_payment': {
+      title: 'Awaiting Care Payment',
+      description: 'Patient will be notified to pay the care fee. Payment details will be included.'
+    },
+    'care_payment_received': {
+      title: 'Care Payment Received',
+      description: 'Patient will be notified that payment was received and care services will begin soon.'
+    },
+    'care_active': {
+      title: 'Care Active',
+      description: 'Patient will be notified that their care services have started and schedule details.'
+    }
+  }
+  
+  return descriptions[status] || { title: '', description: '' }
+}
+
+// Computed
+const patientOptions = computed(() => {
+  if (!Array.isArray(patients.value)) return []
+  return patients.value.map(patient => ({
+    value: patient.id,
+    label: `${patient.first_name} ${patient.last_name} - ${patient.phone}`
+  }))
+})
+
+// Helper functions
+const getTodayDate = () => {
+  return new Date().toISOString().split('T')[0]
+}
+
+const onPatientSelected = (patientId) => {
+  if (patientId) {
+    selectedPatientInfo.value = patients.value.find(p => p.id === patientId)
+  } else {
+    selectedPatientInfo.value = null
+  }
+}
+
+// Load patients
+const loadPatients = async () => {
+  try {
+    const response = await careRequestsService.getAllPatients()
+    if (response.success) {
+      patients.value = response.data || []
+    }
+  } catch (error) {
+    console.error('Error loading patients:', error)
+  }
+}
+
+// Open create request modal
+const openCreateRequestModal = () => {
+  createRequestForm.value = {
+    patient_id: '',
+    initial_status: 'pending_payment', 
+    payment_method: '', 
+    assessment_scheduled_at: '',
+    care_type: '',
+    urgency_level: 'routine',
+    description: '',
+    special_requirements: '',
+    preferred_language: '',
+    preferred_start_date: '',
+    preferred_time: '',
+    service_address: '',
+    city: '',
+    region: '',
+    latitude: null,
+    longitude: null,
+    admin_notes: ''
+  }
+  selectedPatientInfo.value = null
+  showCreateRequestModal.value = true
+  loadPatients()
+}
+
+// Close create request modal
+const closeCreateRequestModal = () => {
+  showCreateRequestModal.value = false
+  selectedPatientInfo.value = null
+}
+
+// Create care request
+const createCareRequest = async () => {
+  if (!createRequestForm.value.patient_id) {
+    toast.showError('Please select a patient')
+    return
+  }
+
+  if (createRequestForm.value.description.length < 20) {
+    toast.showError('Description must be at least 20 characters')
+    return
+  }
+
+  // Validate assessment scheduled date if status is assessment_scheduled
+  if (createRequestForm.value.initial_status === 'assessment_scheduled') {
+    if (!createRequestForm.value.assessment_scheduled_at) {
+      toast.showError('Please provide assessment date and time')
+      return
+    }
+  }
+
+  // Validate payment method if required
+  if (requiresPaymentMethod.value && !createRequestForm.value.payment_method) {
+    toast.showError('Please select a payment method')
+    return
+  }
+  
+  saving.value = true
+  try {
+    const response = await careRequestsService.createCareRequest(createRequestForm.value)
+    
+    if (response.success) {
+      await loadCareRequests(1)
+      await loadStatistics()
+      closeCreateRequestModal()
+      toast.showSuccess('Care request created successfully!')
+    }
+  } catch (error) {
+    toast.showError(error.message || 'Failed to create care request')
+  }
+  saving.value = false
+}
+
+
 // Actions
 const toggleDropdown = (requestId) => {
   activeDropdown.value = activeDropdown.value === requestId ? null : requestId
@@ -859,7 +1807,10 @@ const closeViewModal = () => {
 
 const openAssignNurseModal = (request) => {
   actioningRequest.value = request
-  assignNurseForm.value = { nurse_id: '' }
+  assignNurseForm.value = { 
+    nurse_id: '',
+    scheduled_at: ''
+  }
   showAssignNurseModal.value = true
   activeDropdown.value = null
   loadNurses()
@@ -877,14 +1828,17 @@ const assignNurse = async () => {
   try {
     const response = await careRequestsService.assignNurse(
       actioningRequest.value.id,
-      assignNurseForm.value
+      {
+        nurse_id: assignNurseForm.value.nurse_id,
+        scheduled_at: assignNurseForm.value.scheduled_at
+      }
     )
     
     if (response.success) {
       await loadCareRequests(currentPage.value)
       await loadStatistics()
       closeAssignNurseModal()
-      toast.showSuccess('Nurse assigned successfully!')
+      toast.showSuccess('Nurse assigned and assessment scheduled successfully!')
     }
   } catch (error) {
     toast.showError(error.message || 'Failed to assign nurse')
@@ -2811,6 +3765,35 @@ onUnmounted(() => {
   }
 }
 
+.payment-calculation-preview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.calculation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.calculation-row.total {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 2px solid #cbd5e1;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.calculation-row span:last-child {
+  font-family: 'Courier New', monospace;
+}
+
 /* Small Mobile (480px and below) */
 @media (max-width: 480px) {
   .progress-notes-page {
@@ -2996,6 +3979,234 @@ onUnmounted(() => {
     height: 32px;
     font-size: 11px;
   }
+}
+
+.status-info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-info-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.status-info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.warning-card {
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 16px;
+}
+
+.warning-card svg {
+  width: 20px;
+  height: 20px;
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.warning-card strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.warning-card p {
+  font-size: 12px;
+  color: #92400e;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-modern.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-modern.btn-success:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.form-section {
+  background: #f8fafc;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.form-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+  letter-spacing: -0.3px;
+}
+
+.selected-patient-card {
+  background: white;
+  border: 2px solid #10b981;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.patient-info-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.patient-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid #e2e8f0;
+}
+
+.patient-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.patient-contact {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .form-section {
+    padding: 16px;
+  }
+  
+  .form-section-title {
+    font-size: 15px;
+  }
+  
+  .selected-patient-card {
+    padding: 14px;
+  }
+  
+  .patient-avatar {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+.status-description-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-left: 4px solid #0ea5e9;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 12px;
+  grid-column: 1 / -1;
+}
+
+.status-description-icon {
+  flex-shrink: 0;
+}
+
+.status-description-icon svg {
+  width: 20px;
+  height: 20px;
+  color: #0ea5e9;
+}
+
+.status-description-text {
+  flex: 1;
+}
+
+.status-description-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #075985;
+  margin-bottom: 4px;
+}
+
+.status-description-text p {
+  font-size: 12px;
+  color: #0c4a6e;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.payment-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.payment-admin-badge svg {
+  color: #3b82f6;
+}
+
+.payment-date {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.payment-ref {
+  font-size: 12px;
+  color: #64748b;
+  font-family: monospace;
+  margin-top: 4px;
 }
 
 /* Tablet Landscape */

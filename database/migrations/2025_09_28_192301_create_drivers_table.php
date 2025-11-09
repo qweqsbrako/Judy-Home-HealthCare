@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('last_name');
             $table->string('phone', 20)->unique();
             $table->string('email')->nullable();
-            $table->date('date_of_birth');
+            $table->date('date_of_birth')->nullable();
             $table->string('avatar')->nullable();
             
             // Status

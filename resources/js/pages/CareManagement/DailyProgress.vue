@@ -93,19 +93,25 @@
           />
         </div>
         <div class="filters-group">
-          <select v-model="patientFilter" class="filter-select">
-            <option value="all">All Patients</option>
-            <option v-for="patient in patients" :key="patient.id" :value="patient.id">
-              {{ patient.first_name }} {{ patient.last_name }}
-            </option>
-          </select>
+          <!-- Searchable Patient Filter -->
+          <div class="filter-wrapper">
+            <SearchableSelect
+              v-model="patientFilter"
+              :options="patientFilterOptions"
+              placeholder="All Patients"
+              class="filter-searchable"
+            />
+          </div>
           
-          <select v-model="nurseFilter" class="filter-select">
-            <option value="all">All Nurses</option>
-            <option v-for="nurse in nurses" :key="nurse.id" :value="nurse.id">
-              {{ nurse.first_name }} {{ nurse.last_name }}
-            </option>
-          </select>
+          <!-- Searchable Nurse Filter -->
+          <div class="filter-wrapper">
+            <SearchableSelect
+              v-model="nurseFilter"
+              :options="nurseFilterOptions"
+              placeholder="All Nurses"
+              class="filter-searchable"
+            />
+          </div>
           
           <select v-model="conditionFilter" class="filter-select">
             <option value="all">All Conditions</option>
@@ -957,6 +963,26 @@ const loadProgressNotes = async (page = 1) => {
     loading.value = false
   }
 }
+
+const patientFilterOptions = computed(() => {
+  return [
+    { value: 'all', label: 'All Patients' },
+    ...patients.value.map(patient => ({
+      value: patient.id,
+      label: `${patient.first_name} ${patient.last_name}`
+    }))
+  ]
+})
+
+const nurseFilterOptions = computed(() => {
+  return [
+    { value: 'all', label: 'All Nurses' },
+    ...nurses.value.map(nurse => ({
+      value: nurse.id,
+      label: `${nurse.first_name} ${nurse.last_name}`
+    }))
+  ]
+})
 
 const loadStatistics = async () => {
   try {
@@ -3254,6 +3280,7 @@ watch([patientFilter, nurseFilter, conditionFilter, dateFilter, dateType], () =>
     font-size: 11px;
   }
 }
+
 
 /* Tablet Landscape */
 @media (max-width: 1024px) and (orientation: landscape) {

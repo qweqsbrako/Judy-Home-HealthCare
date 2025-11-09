@@ -215,6 +215,10 @@ export async function getExpiringInsurance(days = 30) {
   return apiGet(`/vehicles/expiring-insurance?days=${days}`);
 }
 
+export async function deleteVehicle(vehicleId) {
+  return apiDelete(`/vehicles/${vehicleId}`);
+}
+
 /**
  * Get vehicles with expiring registration
  * @param {number} days - Number of days to check for expiring registration

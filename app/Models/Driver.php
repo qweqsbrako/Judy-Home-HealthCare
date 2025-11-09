@@ -232,6 +232,11 @@ public function transports()
         return $this;
     }
 
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function assignVehicle($vehicleId, $assignedBy, $notes = null)
     {
         // Check if driver already has an active vehicle

@@ -72,10 +72,10 @@
             <div class="metric-icon">💰</div>
             <div class="metric-content">
               <div class="metric-label">Financial Summary</div>
-              <div class="metric-value">${{ patientStats.totalSpent.toLocaleString() }}</div>
+              <div class="metric-value">GHS {{ patientStats.totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</div>
               <div class="metric-sublabel">Total Spent</div>
               <div class="metric-footer">
-                <span class="metric-detail alert">${{ patientStats.pendingBills }} pending</span>
+                <span class="metric-detail alert">GHS {{ patientStats.pendingBills.toFixed(2) }} pending</span>
               </div>
             </div>
           </div>
@@ -177,10 +177,12 @@
             <div class="metric-icon">💵</div>
             <div class="metric-content">
               <div class="metric-label">Revenue</div>
-              <div class="metric-value">${{ (adminStats.monthlyRevenue / 1000).toFixed(0) }}K</div>
+              <div class="metric-value">GHS {{ adminStats.monthlyRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</div>
               <div class="metric-sublabel">Monthly</div>
               <div class="metric-footer">
-                <span class="metric-detail success">+{{ adminStats.revenueGrowth }}% growth</span>
+                <span class="metric-detail" :class="adminStats.revenueGrowth >= 0 ? 'success' : 'alert'">
+                  {{ adminStats.revenueGrowth >= 0 ? '+' : '' }}{{ adminStats.revenueGrowth }}% growth
+                </span>
               </div>
             </div>
           </div>
@@ -201,31 +203,26 @@
 
       <!-- Main Content Grid -->
       <div class="content-grid">
-        <!-- Left Column - Tabbed Content -->
+        <!-- Left Column -->
         <div class="left-column">
-          <!-- Tabbed Section -->
+          <!-- Today's Schedule (Nurse) / Upcoming Appointments (Others) -->
           <div class="card">
-            <div class="card-header-tabs">
-              <div class="tabs-header">
-                <h3>Today's Schedule</h3>
-                <p class="tabs-subtitle">You have {{ getTotalAppointments() }} appointments scheduled for today</p>
+            <div class="card-header">
+              <div>
+                <h3>{{ user.role === 'nurse' ? "Today's Schedule" : 'Upcoming Appointments' }}</h3>
+                <p class="card-subtitle">
+                  {{ user.role === 'nurse' 
+                    ? `You have ${todaysSchedule.length} appointments scheduled for today` 
+                    : `Your upcoming appointments for the week` 
+                  }}
+                </p>
               </div>
-              <div class="tabs-nav">
-                <button 
-                  v-for="tab in tabs" 
-                  :key="tab.id"
-                  @click="activeTab = tab.id"
-                  class="tab-btn"
-                  :class="{ 'active': activeTab === tab.id }"
-                >
-                  {{ tab.label }}
-                </button>
-              </div>
+              <button class="view-all-btn" @click="viewAllSchedules">View All</button>
             </div>
             
             <div class="card-content">
-              <!-- Schedule Tab -->
-              <div v-show="activeTab === 'schedule'" class="tab-content">
+              <!-- Today's Schedule for Nurses -->
+              <div v-if="user.role === 'nurse'" class="schedule-content">
                 <div v-if="todaysSchedule.length === 0" class="empty-state">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
@@ -236,7 +233,7 @@
                   <div v-for="appointment in todaysSchedule" :key="appointment.id" class="appointment-card">
                     <div class="appointment-header">
                       <div class="appointment-avatar">
-                        <img :src="getAvatarUrl(appointment.patient_name)" :alt="appointment.patient_name">
+                        <img :src="appointment.patient_avatar" :alt="appointment.patient_name">
                       </div>
                       <div class="appointment-info">
                         <h4>{{ appointment.patient_name }}</h4>
@@ -249,139 +246,124 @@
                         </p>
                       </div>
                       <span class="appointment-status" :class="appointment.status">
-                        {{ appointment.status }}
+                        {{ formatStatus(appointment.status) }}
                       </span>
                     </div>
                     <div class="appointment-body">
                       <div class="appointment-detail">
                         <span class="detail-label">Care Type</span>
-                        <span class="detail-value">{{ appointment.care_type }}</span>
+                        <span class="detail-value">{{ formatCareType(appointment.care_type) }}</span>
                       </div>
                       <div class="appointment-detail">
                         <span class="detail-label">Location</span>
                         <span class="detail-value">📍 {{ appointment.location }}</span>
                       </div>
+                      <div v-if="appointment.priority" class="appointment-detail">
+                        <span class="detail-label">Priority</span>
+                        <span class="detail-value">
+                          <span class="priority-badge" :class="appointment.priority">
+                            {{ appointment.priority }}
+                          </span>
+                        </span>
+                      </div>
                     </div>
                     <div class="appointment-footer">
-                      <button class="btn-secondary btn-sm">Check-in</button>
-                      <button class="btn-primary btn-sm">View</button>
+                      <button class="btn-secondary btn-sm" @click="viewScheduleDetail(appointment.id)">View</button>
+                      <button v-if="appointment.status === 'scheduled' || appointment.status === 'confirmed'" 
+                              class="btn-primary btn-sm" 
+                              @click="startShift(appointment.id)">
+                        Start Visit
+                      </button>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Patients Tab -->
-              <div v-show="activeTab === 'patients'" class="tab-content">
-                <div class="patients-list">
-                  <div v-for="patient in upcomingAppointments" :key="patient.id" class="patient-card">
-                    <div class="patient-header">
-                      <div class="patient-avatar">
-                        <img :src="getAvatarUrl(patient.name)" :alt="patient.name">
-                        <div class="patient-status" :class="patient.status"></div>
-                      </div>
-                      <div class="patient-info">
-                        <h4>{{ patient.name }}</h4>
-                        <p>{{ patient.condition }}</p>
-                      </div>
-                      <span class="patient-badge" :class="patient.priority">
-                        {{ patient.priority }}
-                      </span>
-                    </div>
-                    <div class="patient-details">
-                      <div class="detail-item">
-                        <span class="detail-icon">📅</span>
-                        <span>{{ patient.nextVisit }}</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-icon">💊</span>
-                        <span>{{ patient.medications }} medications</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-icon">📋</span>
-                        <span>Last visit: {{ patient.lastVisit }}</span>
-                      </div>
-                    </div>
-                    <div class="patient-actions">
-                      <button class="btn-ghost btn-sm">View Records</button>
-                      <button class="btn-primary btn-sm">Contact</button>
-                    </div>
-                  </div>
+              <!-- Upcoming Appointments for Others -->
+              <div v-else class="upcoming-list">
+                <div v-if="upcomingAppointments.length === 0" class="empty-state">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+                  </svg>
+                  <p>No upcoming appointments</p>
                 </div>
-              </div>
-
-              <!-- Tasks Tab -->
-              <div v-show="activeTab === 'tasks'" class="tab-content">
-                <div class="tasks-list">
-                  <div v-for="task in pendingTasks" :key="task.id" class="task-item">
-                    <div class="task-checkbox">
-                      <input type="checkbox" :id="'task-' + task.id" v-model="task.completed">
-                      <label :for="'task-' + task.id"></label>
+                <div v-else>
+                  <div v-for="appointment in upcomingAppointments" :key="appointment.id" class="upcoming-item">
+                    <div class="upcoming-date">
+                      <div class="date-day">{{ appointment.day }}</div>
+                      <div class="date-month">{{ appointment.month }}</div>
                     </div>
-                    <div class="task-content">
-                      <h4>{{ task.title }}</h4>
-                      <p>{{ task.description }}</p>
-                      <div class="task-meta">
-                        <span class="task-priority" :class="task.priority">{{ task.priority }}</span>
-                        <span class="task-due">Due: {{ task.dueDate }}</span>
-                      </div>
+                    <div class="upcoming-info">
+                      <h4 v-if="appointment.patient && appointment.nurse">
+                        <span class="info-label">Patient:</span> {{ appointment.patient }}
+                        <span class="info-divider">|</span>
+                        <span class="info-label">Nurse:</span> {{ appointment.nurse }}
+                      </h4>
+                      <h4 v-else>{{ appointment.name }}</h4>
+                      <p>{{ appointment.time }} • {{ appointment.type }}</p>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Stats Tab -->
-              <div v-show="activeTab === 'stats'" class="tab-content">
-                <div class="stats-overview">
-                  <div class="stat-box">
-                    <div class="stat-icon">📊</div>
-                    <div class="stat-info">
-                      <h4>Total Appointments</h4>
-                      <p class="stat-number">{{ todaysSchedule.length }}</p>
-                      <span class="stat-change positive">+12% from yesterday</span>
-                    </div>
-                  </div>
-                  <div class="stat-box">
-                    <div class="stat-icon">✅</div>
-                    <div class="stat-info">
-                      <h4>Completed</h4>
-                      <p class="stat-number">{{ getCompletedCount() }}</p>
-                      <span class="stat-change positive">On track</span>
-                    </div>
-                  </div>
-                  <div class="stat-box">
-                    <div class="stat-icon">⏳</div>
-                    <div class="stat-info">
-                      <h4>Pending</h4>
-                      <p class="stat-number">{{ getPendingCount() }}</p>
-                      <span class="stat-change neutral">Review needed</span>
-                    </div>
+                    <span class="upcoming-status" :class="appointment.status">{{ formatStatus(appointment.status) }}</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Upcoming Appointments -->
-          <div class="card">
+          <!-- Recent Care Requests (Admin) -->
+          <div v-if="canAccess(['admin', 'superadmin'])" class="card">
             <div class="card-header">
               <div>
-                <h3>Upcoming Appointments</h3>
-                <p class="card-subtitle">Your upcoming appointments for the week</p>
+                <h3>Recent Care Requests</h3>
+                <p class="card-subtitle">Latest care requests from patients</p>
               </div>
-              <button class="view-all-btn">View All</button>
+              <button class="view-all-btn" @click="viewAllCareRequests">View All</button>
             </div>
+            
             <div class="card-content">
-              <div class="upcoming-list">
-                <div v-for="appointment in upcomingAppointments" :key="appointment.id" class="upcoming-item">
-                  <div class="upcoming-date">
-                    <div class="date-day">{{ appointment.day }}</div>
-                    <div class="date-month">{{ appointment.month }}</div>
+              <div v-if="recentCareRequests.length === 0" class="empty-state">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+                </svg>
+                <p>No care requests yet</p>
+              </div>
+              <div v-else class="care-requests-list">
+                <div v-for="request in recentCareRequests" :key="request.id" class="care-request-card">
+                  <div class="care-request-header">
+                    <div class="care-request-info">
+                      <h4>{{ request.patient ? request.patient.name : 'Unknown Patient' }}</h4>
+                      <p class="care-request-type">{{ formatCareType(request.care_type) }}</p>
+                    </div>
+                    <span class="care-request-status" :class="getStatusClass(request.status)">
+                      {{ request.formatted_status }}
+                    </span>
                   </div>
-                  <div class="upcoming-info">
-                    <h4>{{ appointment.name }}</h4>
-                    <p>{{ appointment.time }} • {{ appointment.type }}</p>
+                  
+                  <div class="care-request-body">
+                    <div class="care-request-detail">
+                      <span class="detail-icon">📍</span>
+                      <span class="detail-text">{{ request.city || request.region || 'Location not specified' }}</span>
+                    </div>
+                    <div class="care-request-detail" v-if="request.urgency_level">
+                      <span class="detail-icon">⚠️</span>
+                      <span class="detail-text">
+                        <span class="urgency-badge" :class="request.urgency_level">
+                          {{ request.urgency_level }}
+                        </span>
+                      </span>
+                    </div>
+                    <div class="care-request-detail" v-if="request.assignedNurse">
+                      <span class="detail-icon">👨‍⚕️</span>
+                      <span class="detail-text">{{ request.assignedNurse.name }}</span>
+                    </div>
+                    <div class="care-request-detail">
+                      <span class="detail-icon">🕐</span>
+                      <span class="detail-text">{{ formatTime(request.created_at) }}</span>
+                    </div>
                   </div>
-                  <span class="upcoming-status" :class="appointment.status">{{ appointment.status }}</span>
+                  
+                  <div class="care-request-footer">
+                    <button class="btn-primary btn-sm" @click="viewCareRequestDetail(request.id)">View Details</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -531,26 +513,7 @@ const recentActivity = ref([])
 const todaysSchedule = ref([])
 const alerts = ref([])
 const upcomingAppointments = ref([])
-const pendingTasks = ref([])
-
-// Tabs
-const activeTab = ref('schedule')
-const tabs = [
-  { id: 'schedule', label: 'Schedule' },
-  { id: 'patients', label: 'Patients' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'stats', label: 'Stats' }
-]
-
-// Computed properties
-const today = computed(() => {
-  return new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-})
+const recentCareRequests = ref([])
 
 // Methods
 const loadDashboard = async () => {
@@ -578,84 +541,10 @@ const loadDashboard = async () => {
     
     recentActivity.value = data.recentActivity || []
     alerts.value = data.alerts || []
+    todaysSchedule.value = data.todaysSchedule || []
+    upcomingAppointments.value = data.upcomingAppointments || []
+    recentCareRequests.value = data.recentCareRequests || []
     
-    if (user.value.role === 'nurse') {
-      todaysSchedule.value = data.todaysSchedule || []
-    }
-
-    // Load upcoming appointments
-    upcomingAppointments.value = data.upcomingAppointments || [
-      {
-        id: 1,
-        name: 'John Doe',
-        day: '24',
-        month: 'Apr',
-        time: '10:30 AM',
-        type: 'Follow-up',
-        status: 'confirmed',
-        condition: 'Post-surgery care',
-        priority: 'high',
-        nextVisit: 'Sunday, April 28 at 10:00 AM',
-        medications: 3,
-        lastVisit: 'April 20, 2025'
-      },
-      {
-        id: 2,
-        name: 'Jane Smith',
-        day: '25',
-        month: 'Apr',
-        time: '02:00 PM',
-        type: 'Consultation',
-        status: 'pending',
-        condition: 'Elderly care',
-        priority: 'medium',
-        nextVisit: 'Monday, April 29 at 02:00 PM',
-        medications: 5,
-        lastVisit: 'April 18, 2025'
-      },
-      {
-        id: 3,
-        name: 'Robert Johnson',
-        day: '26',
-        month: 'Apr',
-        time: '11:00 AM',
-        type: 'Check-up',
-        status: 'confirmed',
-        condition: 'Diabetes management',
-        priority: 'low',
-        nextVisit: 'Tuesday, April 30 at 11:00 AM',
-        medications: 2,
-        lastVisit: 'April 19, 2025'
-      }
-    ]
-
-    // Load pending tasks
-    pendingTasks.value = data.pendingTasks || [
-      {
-        id: 1,
-        title: 'Review patient medication list',
-        description: 'Update and verify current medications for John Doe',
-        priority: 'high',
-        dueDate: 'Today, 3:00 PM',
-        completed: false
-      },
-      {
-        id: 2,
-        title: 'Complete care plan documentation',
-        description: 'Finalize care plan for new patient intake',
-        priority: 'medium',
-        dueDate: 'Tomorrow, 10:00 AM',
-        completed: false
-      },
-      {
-        id: 3,
-        title: 'Schedule follow-up appointment',
-        description: 'Contact patient for post-surgery follow-up',
-        priority: 'high',
-        dueDate: 'Today, 5:00 PM',
-        completed: false
-      }
-    ]
   } catch (err) {
     console.error('Error loading dashboard:', err)
     error.value = err.message
@@ -695,13 +584,14 @@ const formatTime = (date) => {
   return 'Just now'
 }
 
-const getActionText = (status) => {
-  const actionMap = {
-    'pending': 'Start Visit',
-    'in_progress': 'Continue',
-    'completed': 'View Report'
-  }
-  return actionMap[status] || 'View'
+const formatStatus = (status) => {
+  if (!status) return ''
+  return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+const formatCareType = (careType) => {
+  if (!careType) return 'General Care'
+  return careType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
 const requestCare = () => {
@@ -713,20 +603,41 @@ const toggleClockInOut = () => {
   alert(`${isWorking.value ? 'Clocked In' : 'Clocked Out'}!`)
 }
 
-const getAvatarUrl = (name) => {
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=667eea&color=fff&size=128`
+const viewAllSchedules = () => {
+  router.push('/care/schedules')
 }
 
-const getTotalAppointments = () => {
-  return todaysSchedule.value.length
+const viewScheduleDetail = (id) => {
+  router.push(`/schedules/${id}`)
 }
 
-const getCompletedCount = () => {
-  return todaysSchedule.value.filter(a => a.status === 'completed').length
+const startShift = (id) => {
+  router.push(`/schedules/${id}/start`)
 }
 
-const getPendingCount = () => {
-  return todaysSchedule.value.filter(a => a.status === 'pending').length
+const getStatusClass = (status) => {
+  const statusMap = {
+    'pending_payment': 'pending',
+    'payment_received': 'confirmed',
+    'nurse_assigned': 'confirmed',
+    'assessment_scheduled': 'scheduled',
+    'assessment_completed': 'completed',
+    'under_review': 'pending',
+    'awaiting_care_payment': 'pending',
+    'care_active': 'confirmed',
+    'care_completed': 'completed',
+    'cancelled': 'cancelled',
+    'rejected': 'cancelled'
+  }
+  return statusMap[status] || 'pending'
+}
+
+const viewAllCareRequests = () => {
+  router.push('/care/patient/requests')
+}
+
+const viewCareRequestDetail = (id) => {
+  router.push('/care/patient/requests')
 }
 
 // Lifecycle
@@ -1098,84 +1009,45 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-/* Tabs */
-.card-header-tabs {
-  padding: 20px 20px 0 20px;
-  border-bottom: 1px solid #f1f5f9;
+.card-content {
+  padding: 20px;
 }
 
-.tabs-header {
-  margin-bottom: 16px;
-}
-
-.tabs-header h3 {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #0f172a;
-  letter-spacing: -0.3px;
-}
-
-.tabs-subtitle {
-  font-size: 13px;
-  color: #64748b;
-  margin: 0;
-  font-weight: 500;
-}
-
-.tabs-nav {
-  display: flex;
-  gap: 4px;
-  margin-bottom: -1px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.tabs-nav::-webkit-scrollbar {
-  display: none;
-}
-
-.tab-btn {
-  padding: 10px 16px;
+.view-all-btn {
   background: none;
   border: none;
-  border-bottom: 3px solid transparent;
-  color: #64748b;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s;
-  position: relative;
-  white-space: nowrap;
-  flex-shrink: 0;
-  min-height: 44px;
-}
-
-.tab-btn:hover {
-  color: #334155;
-  background: #f8fafc;
-}
-
-.tab-btn.active {
   color: #667eea;
-  border-bottom-color: #667eea;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
-.tab-content {
-  animation: fadeIn 0.3s ease;
+.view-all-btn:hover {
+  background: #f0f4ff;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #94a3b8;
+}
+
+.empty-state svg {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 12px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 /* Appointment Cards */
@@ -1265,12 +1137,14 @@ onUnmounted(() => {
   color: #1e40af;
 }
 
-.appointment-status.pending {
+.appointment-status.pending,
+.appointment-status.scheduled {
   background: #fef3c7;
   color: #d97706;
 }
 
-.appointment-status.urgent {
+.appointment-status.urgent,
+.appointment-status.critical {
   background: #fee2e2;
   color: #dc2626;
 }
@@ -1278,6 +1152,11 @@ onUnmounted(() => {
 .appointment-status.completed {
   background: #d1fae5;
   color: #065f46;
+}
+
+.appointment-status.in_progress {
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .appointment-body {
@@ -1310,290 +1189,76 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
+.priority-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.priority-badge.high,
+.priority-badge.critical {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.priority-badge.medium {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.priority-badge.low {
+  background: #d1fae5;
+  color: #065f46;
+}
+
 .appointment-footer {
   display: flex;
   gap: 8px;
 }
 
-/* Patients List */
-.patients-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.patient-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 14px;
-  transition: all 0.2s;
-}
-
-.patient-card:hover {
-  border-color: #cbd5e1;
-  background: #f1f5f9;
-}
-
-.patient-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.patient-avatar {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  overflow: hidden;
-  flex-shrink: 0;
-  border: 2px solid white;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
-
-.patient-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.patient-status {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #f8fafc;
-}
-
-.patient-status.active {
-  background: #10b981;
-}
-
-.patient-status.inactive {
-  background: #6b7280;
-}
-
-.patient-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.patient-info h4 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-  color: #0f172a;
-}
-
-.patient-info p {
+/* Buttons */
+.btn-primary {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 8px;
   font-size: 12px;
-  color: #64748b;
-  margin: 0;
-}
-
-.patient-badge {
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 10px;
   font-weight: 600;
-  text-transform: capitalize;
-  flex-shrink: 0;
-}
-
-.patient-badge.high {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.patient-badge.medium {
-  background: #fef3c7;
-  color: #d97706;
-}
-
-.patient-badge.low {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.patient-details {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #475569;
-}
-
-.detail-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.patient-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* Tasks List */
-.tasks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.task-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 14px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  transition: all 0.2s;
-}
-
-.task-item:hover {
-  border-color: #cbd5e1;
-  background: #f1f5f9;
-}
-
-.task-checkbox {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.task-checkbox input {
-  width: 20px;
-  height: 20px;
   cursor: pointer;
-  min-width: 20px;
-}
-
-.task-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.task-content h4 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-  color: #0f172a;
-}
-
-.task-content p {
-  font-size: 12px;
-  color: #64748b;
-  margin: 0 0 8px 0;
-  line-height: 1.4;
-}
-
-.task-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.task-priority {
-  padding: 3px 6px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: capitalize;
-}
-
-.task-priority.high {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.task-priority.medium {
-  background: #fef3c7;
-  color: #d97706;
-}
-
-.task-priority.low {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.task-due {
-  font-size: 11px;
-  color: #64748b;
-}
-
-/* Stats Overview */
-.stats-overview {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.stat-box {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
   transition: all 0.2s;
+  min-height: 40px;
 }
 
-.stat-box:hover {
-  border-color: #cbd5e1;
+.btn-primary:hover {
+  background: #5a67d8;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.stat-icon {
-  width: 40px;
-  height: 40px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  flex-shrink: 0;
-}
-
-.stat-info h4 {
+.btn-secondary {
+  background: white;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 8px;
   font-size: 12px;
-  color: #64748b;
-  margin: 0 0 4px 0;
   font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 40px;
 }
 
-.stat-number {
-  font-size: 24px;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 4px 0;
-  line-height: 1;
+.btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
-.stat-change {
+.btn-sm {
+  padding: 8px 12px;
   font-size: 11px;
-  font-weight: 600;
-}
-
-.stat-change.positive {
-  color: #10b981;
-}
-
-.stat-change.neutral {
-  color: #f59e0b;
+  min-height: 36px;
 }
 
 /* Upcoming List */
@@ -1677,110 +1342,10 @@ onUnmounted(() => {
   color: #065f46;
 }
 
-.upcoming-status.pending {
+.upcoming-status.pending,
+.upcoming-status.scheduled {
   background: #fef3c7;
   color: #d97706;
-}
-
-/* Buttons */
-.btn-primary {
-  background: #667eea;
-  color: white;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-height: 40px;
-}
-
-.btn-primary:hover {
-  background: #5a67d8;
-  transform: translateY(-1px);
-}
-
-.btn-secondary {
-  background: white;
-  color: #334155;
-  border: 1px solid #e2e8f0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-height: 40px;
-}
-
-.btn-secondary:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.btn-ghost {
-  background: none;
-  color: #667eea;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-height: 40px;
-}
-
-.btn-ghost:hover {
-  background: #f0f4ff;
-}
-
-.btn-sm {
-  padding: 8px 12px;
-  font-size: 11px;
-  min-height: 36px;
-}
-
-.card-content {
-  padding: 20px;
-}
-
-.view-all-btn {
-  background: none;
-  border: none;
-  color: #667eea;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  transition: all 0.2s;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.view-all-btn:hover {
-  background: #f0f4ff;
-}
-
-/* Empty State */
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: #94a3b8;
-}
-
-.empty-state svg {
-  width: 40px;
-  height: 40px;
-  margin: 0 auto 12px;
-  opacity: 0.5;
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
 }
 
 /* Activity List */
@@ -1883,6 +1448,140 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Care Requests */
+.care-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.care-request-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px;
+  transition: all 0.2s;
+}
+
+.care-request-card:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.care-request-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.care-request-info h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: #0f172a;
+}
+
+.care-request-type {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.care-request-status {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.care-request-status.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.care-request-status.confirmed {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.care-request-status.scheduled {
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.care-request-status.completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.care-request-status.cancelled {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.care-request-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+}
+
+.care-request-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.detail-text {
+  font-size: 12px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.urgency-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.urgency-badge.routine {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.urgency-badge.urgent {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.urgency-badge.emergency {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.care-request-footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .alerts-list {
   display: flex;
   flex-direction: column;
@@ -1948,8 +1647,6 @@ onUnmounted(() => {
 }
 
 /* Responsive Breakpoints */
-
-/* Tablet (768px and below) */
 @media (max-width: 768px) {
   .dashboard-container {
     padding: 0 12px;
@@ -1958,29 +1655,14 @@ onUnmounted(() => {
   .dashboard-header {
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
-    padding-bottom: 20px;
-    margin-bottom: 20px;
   }
   
-  .dashboard-title {
-    font-size: 20px;
-  }
-
-  .dashboard-subtitle {
-    font-size: 13px;
-  }
-
   .header-actions {
     flex-direction: column;
     width: 100%;
   }
 
-  .header-time {
-    width: 100%;
-    justify-content: center;
-  }
-
+  .header-time,
   .header-btn {
     width: 100%;
     justify-content: center;
@@ -1988,16 +1670,6 @@ onUnmounted(() => {
   
   .metrics-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-
-  .metric-value {
-    font-size: 24px;
-  }
-
-  .content-grid {
-    gap: 12px;
   }
 
   .card-header {
@@ -2005,186 +1677,17 @@ onUnmounted(() => {
     align-items: flex-start;
   }
 
-  .view-all-btn {
-    align-self: flex-start;
-  }
-
-  .tabs-nav {
-    gap: 2px;
-  }
-
-  .tab-btn {
-    padding: 10px 12px;
-    font-size: 12px;
-  }
-
-  .card-content {
-    padding: 16px;
-  }
-
-  .appointments-grid {
-    gap: 10px;
-  }
-
-  .stats-overview {
-    gap: 10px;
-  }
-
-  .patient-actions,
-  .appointment-footer {
+  .care-request-footer {
     flex-direction: column;
   }
 
-  .btn-primary,
-  .btn-secondary,
-  .btn-ghost {
+  .care-request-footer .btn-primary,
+  .care-request-footer .btn-secondary {
     width: 100%;
     justify-content: center;
   }
 }
 
-/* Mobile (480px and below) */
-@media (max-width: 480px) {
-  .dashboard-container {
-    padding: 0 8px;
-  }
-
-  .dashboard-title {
-    font-size: 18px;
-  }
-
-  .dashboard-subtitle {
-    font-size: 12px;
-  }
-
-  .metric-card {
-    padding: 16px;
-    gap: 12px;
-  }
-
-  .metric-icon {
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-  }
-
-  .metric-value {
-    font-size: 22px;
-  }
-
-  .metric-label {
-    font-size: 11px;
-  }
-
-  .metric-sublabel {
-    font-size: 12px;
-  }
-
-  .card-header h3 {
-    font-size: 15px;
-  }
-
-  .tabs-header h3 {
-    font-size: 16px;
-  }
-
-  .tabs-subtitle {
-    font-size: 12px;
-  }
-
-  .appointment-header {
-    flex-wrap: wrap;
-  }
-
-  .appointment-status {
-    order: 3;
-    width: 100%;
-    text-align: center;
-    margin-top: 4px;
-  }
-
-  .patient-header {
-    flex-wrap: wrap;
-  }
-
-  .patient-badge {
-    order: 3;
-    width: 100%;
-    text-align: center;
-    margin-top: 4px;
-  }
-
-  .upcoming-item {
-    padding: 12px;
-  }
-
-  .upcoming-date {
-    min-width: 48px;
-    padding: 8px;
-  }
-
-  .date-day {
-    font-size: 18px;
-  }
-
-  .time-display {
-    display: none;
-  }
-
-  .btn-text {
-    font-size: 12px;
-  }
-}
-
-/* Extra Small Mobile (360px and below) */
-@media (max-width: 360px) {
-  .dashboard-title {
-    font-size: 16px;
-  }
-
-  .metric-value {
-    font-size: 20px;
-  }
-
-  .header-btn {
-    padding: 8px 12px;
-    font-size: 12px;
-  }
-
-  .header-btn svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  .appointment-avatar,
-  .patient-avatar {
-    width: 36px;
-    height: 36px;
-  }
-
-  .upcoming-date {
-    min-width: 44px;
-  }
-}
-
-/* Landscape Mobile */
-@media (max-width: 812px) and (orientation: landscape) {
-  .dashboard-header {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .header-actions {
-    flex-direction: row;
-    width: auto;
-  }
-
-  .metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* Desktop (1024px and above) */
 @media (min-width: 1024px) {
   .content-grid {
     grid-template-columns: 2fr 1fr;
@@ -2196,25 +1699,6 @@ onUnmounted(() => {
 
   .appointments-grid {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  }
-
-  .stats-overview {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* Large Desktop (1440px and above) */
-@media (min-width: 1440px) {
-  .dashboard-container {
-    padding: 0 24px;
-  }
-
-  .metrics-grid {
-    gap: 20px;
-  }
-
-  .content-grid {
-    gap: 20px;
   }
 }
 </style>

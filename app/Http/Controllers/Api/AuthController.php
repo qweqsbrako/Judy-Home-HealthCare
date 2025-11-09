@@ -944,6 +944,7 @@ class AuthController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'avatar_url' => $user->avatar ?: $this->generateAvatarUrl($user),
+            'avatar_path' => $user->avatar_url ?: $this->generateAvatarUrl($user),
             'is_active' => $user->is_active,
             'is_verified' => $user->is_verified,
             'last_login_at' => $user->last_login_at,

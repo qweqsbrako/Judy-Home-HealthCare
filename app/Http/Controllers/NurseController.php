@@ -15,6 +15,7 @@ use App\Mail\UserInvitationMail;
 use App\Http\Resources\UserResource;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
+use App\Notifications\UserInvitationNotification;
 
 class NurseController extends Controller
 {
@@ -210,7 +211,7 @@ class NurseController extends Controller
             // Send invitation email if requested
             if ($request->send_invite) {
                 try {
-                    Mail::to($nurse->email)->send(new UserInvitationMail($nurse, $temporaryPassword));
+                    $nurse->notify(new UserInvitationNotification($temporaryPassword));
                 } catch (\Exception $e) {
                     \Log::error('Failed to send invitation email: ' . $e->getMessage());
                 }
@@ -625,7 +626,8 @@ class NurseController extends Controller
 
             // Send email
             try {
-                Mail::to($nurse->email)->send(new UserInvitationMail($nurse, $temporaryPassword));
+                $nurse->notify(new UserInvitationNotification($temporaryPassword));
+
             } catch (\Exception $e) {
                 \Log::error('Failed to send password reset email: ' . $e->getMessage());
                 

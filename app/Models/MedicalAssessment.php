@@ -65,11 +65,14 @@ class MedicalAssessment extends Model
             // Patient information (for creating new patient)
             'patient_first_name' => 'required_without:patient_id|string|max:255',
             'patient_last_name' => 'required_without:patient_id|string|max:255',
+            'patient_email' => 'required_without:patient_id|string|max:255',
+
             //'patient_age' => 'required_without:patient_id|integer|min:0|max:120',
             'patient_gender' => 'required_without:patient_id|in:male,female,other',
             'patient_phone' => 'required_without:patient_id|string|max:20',
             'patient_date_of_birth' => 'required_without:patient_id|date|before:today',
-            'patient_ghana_card' => 'required_without:patient_id|string|max:20|unique:users,ghana_card_number',
+            'patient_ghana_card' => 'nullable|string|max:20|unique:users,ghana_card_number', 
+
             
             // Or existing patient
             'patient_id' => 'required_without:patient_first_name|exists:users,id',

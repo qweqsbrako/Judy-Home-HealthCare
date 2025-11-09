@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use App\Mail\UserInvitationMail;
 use App\Http\Resources\UserResource;
 use Carbon\Carbon;
+use App\Notifications\UserInvitationNotification;
 
 class DoctorController extends Controller
 {
@@ -217,7 +218,7 @@ class DoctorController extends Controller
             // Send invitation email if requested
             if ($request->send_invite) {
                 try {
-                    Mail::to($doctor->email)->send(new UserInvitationMail($doctor, $temporaryPassword));
+                    $doctor->notify(new UserInvitationNotification($temporaryPassword));
                 } catch (\Exception $e) {
                     \Log::error('Failed to send invitation email: ' . $e->getMessage());
                 }
@@ -681,7 +682,8 @@ class DoctorController extends Controller
             ]);
 
             try {
-                Mail::to($doctor->email)->send(new UserInvitationMail($doctor, $temporaryPassword));
+                $doctor->notify(new UserInvitationNotification($temporaryPassword));
+
             } catch (\Exception $e) {
                 \Log::error('Failed to send password reset email: ' . $e->getMessage());
                 

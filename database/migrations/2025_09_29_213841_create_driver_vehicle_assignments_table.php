@@ -42,7 +42,7 @@ return new class extends Migration
             $table->index(['assigned_at', 'unassigned_at']);
             
             // Ensure one active assignment per vehicle
-            $table->unique(['vehicle_id'], 'unique_active_vehicle_assignment');
+            // $table->unique(['vehicle_id'], 'unique_active_vehicle_assignment');
         });
     }
 

@@ -20,7 +20,7 @@
       <!-- User Profile Section -->
       <div class="user-profile" v-show="!sidebarCollapsed">
         <div class="profile-avatar">
-          <img :src="user.avatar_url" :alt="user.full_name" />
+          <img :src="user.avatar_path" :alt="user.full_name" />
           <div class="status-indicator" :class="user.is_active ? 'status-online' : 'status-offline'"></div>
         </div>
         <div class="profile-info">
@@ -118,11 +118,11 @@
               </svg>
             </a>
             <ul v-show="dropdowns.billing && !sidebarCollapsed" class="nav-dropdown-menu">
-              <li v-if="canAccess(['patient'])"><router-link to="/billing/my-bills" class="nav-dropdown-link">My Bills</router-link></li>
-              <li v-if="canAccess(['patient'])"><router-link to="/billing/payment-methods" class="nav-dropdown-link">Payment Methods</router-link></li>
-              <li v-if="canAccess(['admin', 'superadmin'])"><router-link to="/billing/invoices" class="nav-dropdown-link">All Invoices</router-link></li>
-              <li v-if="canAccess(['admin', 'superadmin'])"><router-link to="/billing/payments" class="nav-dropdown-link">Payment History</router-link></li>
-              <li><router-link to="/billing/medication-store" class="nav-dropdown-link">Medication Store</router-link></li>
+              <!-- <li v-if="canAccess(['patient'])"><router-link to="/billing/my-bills" class="nav-dropdown-link">My Bills</router-link></li> -->
+              <!-- <li v-if="canAccess(['patient'])"><router-link to="/billing/payment-methods" class="nav-dropdown-link">Payment Methods</router-link></li> -->
+              <!-- <li v-if="canAccess(['admin', 'superadmin'])"><router-link to="/billing/invoices" class="nav-dropdown-link">All Invoices</router-link></li> -->
+              <li v-if="canAccess(['admin', 'superadmin'])"><router-link to="/payment/history" class="nav-dropdown-link">Payment History</router-link></li>
+              <!-- <li><router-link to="/billing/medication-store" class="nav-dropdown-link">Medication Store</router-link></li> -->
             </ul>
           </li>
         
@@ -204,7 +204,7 @@
           <!-- User Menu -->
           <div class="header-user-menu">
             <button @click="toggleUserMenu" class="header-user-btn">
-              <img :src="user.avatar_url" :alt="user.full_name" class="user-avatar">
+              <img :src="user.avatar_path" :alt="user.full_name" class="user-avatar">
               <span class="user-name">{{ user.first_name }}</span>
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M7.41 8.84L12 13.42l4.59-4.58L18 10.25l-6 6-6-6z"/>
@@ -214,7 +214,7 @@
             <!-- User Dropdown Menu -->
             <div v-show="showUserMenu" class="user-dropdown-menu">
               <div class="user-dropdown-header">
-                <img :src="user.avatar_url" :alt="user.full_name" class="dropdown-user-avatar">
+                <img :src="user.avatar_path" :alt="user.full_name" class="dropdown-user-avatar">
                 <div class="dropdown-user-info">
                   <h4 class="dropdown-user-name">{{ user.full_name }}</h4>
                   <p class="dropdown-user-email">{{ user.email }}</p>

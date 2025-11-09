@@ -66,7 +66,9 @@ class NotificationLog extends Model
     public const TYPE_ASSESSMENT_SCHEDULED = 'assessment_scheduled';
     public const TYPE_CARE_STARTED = 'care_started';
     public const TYPE_CARE_COMPLETED = 'care_completed';
-    
+    public const TYPE_CARE_REQUEST_CREATED = 'care_request_created';
+    public const TYPE_PAYMENT_RECEIVED = 'payment_received';
+
     /**
      * Status constants
      */

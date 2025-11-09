@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
+use App\Models\TransportRequest;
 
 class DriverController extends Controller
 {
@@ -45,8 +46,18 @@ class DriverController extends Controller
             }
         }
 
+        // Enhanced search - includes name, phone, email, and vehicle registration
         if ($request->filled('search')) {
-            $query->search($request->search);
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                ->orWhere('last_name', 'like', "%{$search}%")
+                ->orWhere('phone', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")
+                ->orWhereHas('currentVehicle', function($vq) use ($search) {
+                    $vq->where('registration_number', 'like', "%{$search}%");
+                });
+            });
         }
 
         // Sort by creation date
@@ -76,20 +87,11 @@ class DriverController extends Controller
             'last_name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:drivers',
             'email' => 'nullable|email|unique:drivers',
-            'date_of_birth' => 'required|date|before:today',
+            'date_of_birth' => 'nullable|date|before:today',
             'notes' => 'nullable|string',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048'
         ]);
 
-        // Validate minimum age (18 years)
-        $age = Carbon::parse($request->date_of_birth)->age;
-        if ($age < 18) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Driver must be at least 18 years old.',
-                'errors' => ['date_of_birth' => ['Driver must be at least 18 years old.']]
-            ], 422);
-        }
 
         DB::beginTransaction();
 
@@ -147,6 +149,68 @@ class DriverController extends Controller
         ]);
     }
 
+
+    /**
+     * Delete a driver (soft delete)
+     */
+    public function destroy(Driver $driver)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Check if driver has an active vehicle assignment
+            if ($driver->current_vehicle) {
+                // Unassign the vehicle before deleting
+                try {
+                    $driver->unassignVehicle(Auth::id(), 'Driver deleted by system');
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to unassign vehicle during driver deletion', [
+                        'driver_id' => $driver->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            // Check if driver has any active transport requests
+            $activeTransports = $driver->transportRequests()
+                ->whereIn('status', ['assigned', 'in_progress'])
+                ->count();
+
+            if ($activeTransports > 0) {
+                DB::rollback();
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot delete driver. They have {$activeTransports} active transport request(s). Please complete or cancel them first."
+                ], 422);
+            }
+
+            // Perform soft delete
+            $driver->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Driver deleted successfully!'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            \Log::error('Error deleting driver', [
+                'driver_id' => $driver->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete driver.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
     /**
      * Update the specified driver
      */
@@ -157,7 +221,7 @@ class DriverController extends Controller
             'last_name' => 'required|string|max:255',
             'phone' => 'required|string|max:20|unique:drivers,phone,' . $driver->id,
             'email' => 'nullable|email|unique:drivers,email,' . $driver->id,
-            'date_of_birth' => 'required|date|before:today',
+            'date_of_birth' => 'nullable|date|before:today',
             'notes' => 'nullable|string',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048'
         ]);
@@ -258,6 +322,8 @@ class DriverController extends Controller
      */
     public function assignVehicle(Request $request, Driver $driver)
     {
+        \Log::info("Vehicle assign");
+        \Log::info($request->all());
         $request->validate([
             'vehicle_id' => 'required|exists:vehicles,id',
             'notes' => 'nullable|string'
@@ -279,7 +345,7 @@ class DriverController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => "Failed to assign vehicle. Please try again"
+                'message' => $e->getMessage()
             ], 422);
         }
     }

@@ -42,6 +42,15 @@ export async function getCareRequests(params = {}) {
 }
 
 /**
+ * Update care request status manually
+ * @param {number} requestId - Care request ID
+ * @param {Object} data - Status update data {new_status, reason}
+ */
+export async function updateStatus(requestId, data) {
+  return apiPost(`/admin/care-requests/${requestId}/update-status`, data);
+}
+
+/**
  * Get a specific care request by ID
  * @param {number} id - Care request ID
  */
@@ -54,6 +63,13 @@ export async function getCareRequest(id) {
  */
 export async function getStatistics() {
   return apiGet('/admin/care-requests/statistics');
+}
+
+/**
+ * Get all patients for care request creation
+ */
+export async function getAllPatients() {
+  return apiGet('/admin/care-requests/patients');
 }
 
 /**
@@ -78,9 +94,17 @@ export async function getAvailableNurses(params = {}) {
 // ==================== CARE REQUEST ACTIONS ====================
 
 /**
+ * Create a new care request (admin)
+ * @param {Object} data - Care request data
+ */
+export async function createCareRequest(data) {
+  return apiPost('/admin/care-requests/create', data);
+}
+
+/**
  * Assign a nurse to a care request
  * @param {number} requestId - Care request ID
- * @param {Object} data - Assignment data {nurse_id}
+ * @param {Object} data - Assignment data {nurse_id, scheduled_at}
  */
 export async function assignNurse(requestId, data) {
   return apiPost(`/admin/care-requests/${requestId}/assign-nurse`, data);

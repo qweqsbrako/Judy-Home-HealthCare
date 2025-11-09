@@ -46,6 +46,10 @@ export async function getDrivers(filters = {}) {
   return apiGet(url);
 }
 
+export async function deleteDriver(driverId) {
+  return apiDelete(`/drivers/${driverId}`);
+}
+
 /**
  * Get a single driver by ID
  * @param {number} driverId - Driver ID
@@ -211,7 +215,7 @@ export async function exportDrivers(filters = {}) {
 /**
  * Upload driver avatar
  * @param {number} driverId - Driver ID
- * @param {File} avatarFile - Avatar image file
+ * @param {File} avatarFile - Avatar image file 
  */
 export async function uploadAvatar(driverId, avatarFile) {
   const formData = new FormData();
@@ -224,5 +228,5 @@ export async function uploadAvatar(driverId, avatarFile) {
  * Get available vehicles for assignment
  */
 export async function getAvailableVehicles() {
-  return apiGet('/vehicles/available');
+  return apiGet('/vehicles/available/list');
 }

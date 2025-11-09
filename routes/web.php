@@ -24,6 +24,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\AdminCareRequestController;
+use App\Http\Controllers\PaymentController;
 
 
 /*
@@ -67,8 +68,18 @@ Route::middleware('auth:web')->group(function () {
     // User Management Routes
     Route::prefix('users')->group(function () {
         
+        // ============================================
+        // IMPORTANT: Static routes MUST come before parameterized routes!
+        // ============================================
+        
         // User statistics (accessible to all authenticated users)
         Route::get('statistics', [UserController::class, 'statistics']);
+        
+        // Export route (static route - must come before {user})
+        Route::get('export', [UserController::class, 'export']);
+        
+        // List route for dropdowns (NO pagination) - MUST come before {user}
+        Route::get('list', [UserController::class, 'list']);
         
         // Self-management routes (users can manage their own profile)
         Route::get('profile', function (Request $request) {
@@ -82,23 +93,27 @@ Route::middleware('auth:web')->group(function () {
         Route::delete('delete-avatar', [UserController::class, 'deleteAvatar']);
         
         // Basic CRUD operations
-        Route::get('/', [UserController::class, 'index']);
+        Route::get('/', [UserController::class, 'index']); // Paginated list
         Route::post('/', [UserController::class, 'store']);
-        Route::get('export', [UserController::class, 'export']);
+        
+        // ============================================
+        // Parameterized routes MUST come LAST
+        // ============================================
+        
         Route::get('{user}', [UserController::class, 'show']);
         Route::put('{user}', [UserController::class, 'update']);
         Route::delete('{user}', [UserController::class, 'destroy']);
         Route::post('/{user}/change-password', [UserController::class, 'changePassword']);
         Route::post('/{user}/send-password-reset', [UserController::class, 'sendPasswordResetEmail']);
-
+        
         // User verification routes
         Route::post('{user}/verify', [UserController::class, 'verify']);
         Route::post('{user}/reject', [UserController::class, 'reject']);
-
+        
         // User status management
         Route::post('{user}/suspend', [UserController::class, 'suspend']);
         Route::post('{user}/activate', [UserController::class, 'activate']);
-
+        
         // Invitation management
         Route::post('{user}/resend-invitation', [UserController::class, 'resendInvitation']);
     });
@@ -136,6 +151,14 @@ Route::middleware('auth:web')->group(function () {
     Route::post('doctors/{doctor}/change-password', [DoctorController::class, 'changePassword']);
     Route::post('doctors/{doctor}/send-password-reset', [DoctorController::class, 'sendPasswordResetEmail']);
     Route::apiResource('doctors', DoctorController::class);
+
+
+
+    // Payment routes
+    Route::get('/payments', [PaymentController::class, 'index']);
+    Route::get('/payments/statistics', [PaymentController::class, 'getStatistics']);
+    Route::get('/payments/export', [PaymentController::class, 'export']);
+    Route::get('/payments/{id}', [PaymentController::class, 'show']);
 
 
     // Pending Verifications
@@ -343,13 +366,17 @@ Route::middleware('auth:web')->group(function () {
         Route::get('/', [DriverController::class, 'index']);                   
         Route::post('/', [DriverController::class, 'store']);                  
         Route::get('{driver}', [DriverController::class, 'show']);             
-        Route::put('{driver}', [DriverController::class, 'update']);             
+        Route::put('{driver}', [DriverController::class, 'update']);    
+        Route::delete('/{driver}', [DriverController::class, 'destroy'])
+        ->name('drivers.destroy');         
         
         Route::post('{driver}/suspend', [DriverController::class, 'suspend']);
         Route::post('{driver}/reactivate', [DriverController::class, 'reactivate']);
         Route::post('{driver}/assign-vehicle', [DriverController::class, 'assignVehicle']);
         Route::post('{driver}/unassign-vehicle', [DriverController::class, 'unassignVehicle']);
     });
+
+
 
     /*
     |--------------------------------------------------------------------------
@@ -365,6 +392,8 @@ Route::middleware('auth:web')->group(function () {
         
         // Vehicle Status Management
         Route::patch('/{vehicle}/status', [VehicleController::class, 'updateStatus']); 
+        Route::delete('/{vehicle}', [VehicleController::class, 'destroy'])
+        ->name('vehicles.destroy');
         
         // Driver Assignment Routes
         Route::post('/{vehicle}/assign-driver', [VehicleController::class, 'assignDriver']);     
@@ -381,6 +410,7 @@ Route::middleware('auth:web')->group(function () {
         // Reports & Export
         Route::get('/dashboard/stats', [VehicleController::class, 'dashboard']);        
         Route::get('/export/csv', [VehicleController::class, 'export']);  
+        
     });
 
     /*
@@ -539,6 +569,8 @@ Route::middleware(['auth:web', 'role:admin,superadmin'])->prefix('admin')->group
         Route::get('/', [AdminCareRequestController::class, 'index']);
         Route::get('/statistics', [AdminCareRequestController::class, 'getStatistics']);
         Route::get('/nurses', [AdminCareRequestController::class, 'getAvailableNurses']);
+        Route::get('/export', [AdminCareRequestController::class, 'export']); 
+
         
         // Actions
         Route::post('/{id}/assign-nurse', [AdminCareRequestController::class, 'assignNurse']);
@@ -547,6 +579,10 @@ Route::middleware(['auth:web', 'role:admin,superadmin'])->prefix('admin')->group
         Route::post('/{id}/issue-care-cost', [AdminCareRequestController::class, 'issueCareCost']);
         Route::post('/{id}/start-care', [AdminCareRequestController::class, 'startCare']);
         Route::post('/{id}/reject', [AdminCareRequestController::class, 'reject']);
+        Route::post('/{id}/update-status', [AdminCareRequestController::class, 'updateStatus']);
+        Route::get('/patients', [AdminCareRequestController::class, 'getPatients']);
+        Route::post('/create', [AdminCareRequestController::class, 'createRequest']);
+
     });
     
 });

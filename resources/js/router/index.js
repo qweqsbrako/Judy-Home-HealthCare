@@ -183,6 +183,13 @@ const routes = [
     component: () => import('../pages/Transportation/DriverVehicleAssignments.vue'),
     meta: { requiresAuth: true, roles: ['patient', 'admin', 'superadmin','nurse'] }
   },
+
+  {
+    path: '/payment/history',
+    name: 'payment-history',
+    component: () => import('../pages/Payment/PaymentHistory.vue'),
+    meta: { requiresAuth: true, roles: ['patient', 'admin', 'superadmin','nurse'] }
+  },
   
   // Quality Assurance Routes
   {

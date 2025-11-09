@@ -237,17 +237,106 @@ export async function exportProgressNotes(filters = {}) {
 }
 
 /**
- * Get available patients
+ * Get available patients (ALL patients, no pagination)
+ * @param {Object} options - Optional filters
  */
-export async function getAvailablePatients() {
-  return apiGet('/users?role=patient');
+export async function getAvailablePatients(options = {}) {
+  const params = new URLSearchParams();
+  params.append('role', 'patient');
+  
+  // Optional: only get active patients
+  if (options.active_only !== false) {
+    params.append('active_only', 'true');
+  }
+  
+  // Optional: only get verified patients
+  if (options.verified_only !== false) {
+    params.append('verified_only', 'true');
+  }
+  
+  // Optional: search
+  if (options.search) {
+    params.append('search', options.search);
+  }
+  
+  const queryString = params.toString();
+  return apiGet(`/users/list?${queryString}`);
 }
 
 /**
- * Get available nurses
+ * Get available nurses (ALL nurses, no pagination)
+ * @param {Object} options - Optional filters
  */
-export async function getAvailableNurses() {
-  return apiGet('/users?role=nurse');
+export async function getAvailableNurses(options = {}) {
+  const params = new URLSearchParams();
+  params.append('role', 'nurse');
+  
+  // Optional: only get active nurses
+  if (options.active_only !== false) {
+    params.append('active_only', 'true');
+  }
+  
+  // Optional: only get verified nurses
+  if (options.verified_only !== false) {
+    params.append('verified_only', 'true');
+  }
+  
+  // Optional: search
+  if (options.search) {
+    params.append('search', options.search);
+  }
+  
+  const queryString = params.toString();
+  return apiGet(`/users/list?${queryString}`);
+}
+
+/**
+ * Get available doctors (ALL doctors, no pagination)
+ * @param {Object} options - Optional filters
+ */
+export async function getAvailableDoctors(options = {}) {
+  const params = new URLSearchParams();
+  params.append('role', 'doctor');
+  
+  if (options.active_only !== false) {
+    params.append('active_only', 'true');
+  }
+  
+  if (options.verified_only !== false) {
+    params.append('verified_only', 'true');
+  }
+  
+  if (options.search) {
+    params.append('search', options.search);
+  }
+  
+  const queryString = params.toString();
+  return apiGet(`/users/list?${queryString}`);
+}
+
+/**
+ * Get users list by role (generic method)
+ * @param {string} role - User role
+ * @param {Object} options - Optional filters
+ */
+export async function getUsersByRole(role, options = {}) {
+  const params = new URLSearchParams();
+  params.append('role', role);
+  
+  if (options.active_only !== false) {
+    params.append('active_only', 'true');
+  }
+  
+  if (options.verified_only !== false) {
+    params.append('verified_only', 'true');
+  }
+  
+  if (options.search) {
+    params.append('search', options.search);
+  }
+  
+  const queryString = params.toString();
+  return apiGet(`/users/list?${queryString}`);
 }
 
 /**

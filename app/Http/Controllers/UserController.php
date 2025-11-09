@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Mail\UserInvitationMail;
+use App\Notifications\UserInvitationNotification;
 use App\Http\Resources\UserResource;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -196,7 +197,8 @@ class UserController extends Controller
             // Send invitation email if requested
             if ($request->send_invite) {
                 try {
-                    Mail::to($user->email)->send(new UserInvitationMail($user, $temporaryPassword));
+                    $user->notify(new UserInvitationNotification($temporaryPassword));
+
                 } catch (\Exception $e) {
                     \Log::error('Failed to send invitation email: ' . $e->getMessage());
                 }
@@ -669,7 +671,7 @@ class UserController extends Controller
             ]);
 
             // Send invitation email
-            Mail::to($user->email)->send(new UserInvitationMail($user, $temporaryPassword));
+            $user->notify(new UserInvitationNotification($temporaryPassword));
 
             return response()->json([
                 'success' => true,
@@ -810,7 +812,8 @@ class UserController extends Controller
 
             // Send email
             try {
-                Mail::to($user->email)->send(new UserInvitationMail($user, $temporaryPassword));
+                $user->notify(new UserInvitationNotification($temporaryPassword));
+
             } catch (\Exception $e) {
                 \Log::error('Failed to send password reset email: ' . $e->getMessage());
                 
@@ -902,6 +905,62 @@ class UserController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete photo',
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get list of users for select dropdowns (no pagination)
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function list(Request $request): JsonResponse
+    {
+        try {
+            $query = User::query();
+            
+            // Role filter (required for this endpoint)
+            if ($request->has('role') && $request->role !== 'all') {
+                $query->where('role', $request->role);
+            }
+            
+            // Only active and verified users by default
+            if ($request->boolean('active_only', true)) {
+                $query->where('is_active', true);
+            }
+            
+            if ($request->boolean('verified_only', true)) {
+                $query->where('verification_status', 'verified');
+            }
+            
+            // Optional search
+            if ($request->filled('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
+            
+            // Get all matching users (no pagination)
+            $users = $query
+                ->select('id', 'first_name', 'last_name', 'email', 'phone', 'role')
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $users
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch users list',
                 'error' => config('app.debug') ? $e->getMessage() : 'Server error'
             ], 500);
         }

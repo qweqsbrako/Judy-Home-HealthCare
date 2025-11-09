@@ -8,6 +8,7 @@ use App\Models\DriverVehicleAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Models\TransportRequest;
 
 class VehicleController extends Controller
 {
@@ -339,6 +340,86 @@ class VehicleController extends Controller
                 'total' => $transports->total()
             ]
         ]);
+    }
+
+
+    /**
+     * Delete a vehicle (soft delete)
+     */
+    public function destroy(Vehicle $vehicle)
+    {
+        try {
+            DB::beginTransaction();
+
+            // Check if vehicle has a current driver with active transport requests
+            $activeTransports = 0;
+            
+            if ($vehicle->current_driver) {
+                // Check if the assigned driver has any active transport requests
+                $activeTransports = TransportRequest::where('driver_id', $vehicle->current_driver->id)
+                    ->whereIn('status', ['assigned', 'in_progress'])
+                    ->count();
+                    
+                if ($activeTransports > 0) {
+                    DB::rollback();
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Cannot delete vehicle. The assigned driver has {$activeTransports} active transport request(s). Please complete or cancel them first."
+                    ], 422);
+                }
+                
+                // Unassign the driver before deleting
+                try {
+                    $vehicle->unassignDriver(Auth::id(), 'Vehicle deleted by system');
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to unassign driver during vehicle deletion', [
+                        'vehicle_id' => $vehicle->id,
+                        'driver_id' => $vehicle->current_driver->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            // Check if vehicle is currently in use
+            if ($vehicle->status === 'in_use') {
+                \Log::warning('Deleting vehicle that is in use', [
+                    'vehicle_id' => $vehicle->id,
+                    'status' => $vehicle->status,
+                    'registration' => $vehicle->registration_number
+                ]);
+            }
+
+            // Perform soft delete
+            $vehicle->delete();
+
+            DB::commit();
+
+            \Log::info('Vehicle deleted successfully', [
+                'vehicle_id' => $vehicle->id,
+                'registration' => $vehicle->registration_number,
+                'deleted_by' => Auth::id()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Vehicle deleted successfully!'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            \Log::error('Error deleting vehicle', [
+                'vehicle_id' => $vehicle->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete vehicle.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**

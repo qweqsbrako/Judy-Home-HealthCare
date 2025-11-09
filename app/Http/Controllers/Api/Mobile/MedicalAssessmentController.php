@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use App\Mail\UserInvitationMail;
+use App\Notifications\UserInvitationNotification;
 
 class MedicalAssessmentController extends Controller
 {
@@ -271,7 +272,8 @@ class MedicalAssessmentController extends Controller
         $patient = User::create($patientData);
 
         try {
-            Mail::to($email)->send(new UserInvitationMail($patient, $temporaryPassword));
+            $patient->notify(new UserInvitationNotification($temporaryPassword));
+
         } catch (\Exception $e) {
             \Log::error('Failed to send invitation email: ' . $e->getMessage());
         }

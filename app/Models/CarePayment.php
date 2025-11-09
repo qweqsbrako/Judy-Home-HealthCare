@@ -186,4 +186,30 @@ class CarePayment extends Model
             'refunded_at' => now(),
         ]);
     }
+
+    /**
+     * Check if payment was created by admin
+     */
+    public function isAdminCreated(): bool
+    {
+        return $this->payment_provider === 'admin_created' || 
+            ($this->metadata && isset($this->metadata['created_by_admin']));
+    }
+
+    /**
+     * Get admin who created the payment
+     */
+    public function getAdminCreator(): ?string
+    {
+        if ($this->metadata && isset($this->metadata['admin_name'])) {
+            return $this->metadata['admin_name'];
+        }
+        
+        if ($this->metadata && isset($this->metadata['created_by_admin'])) {
+            $admin = User::find($this->metadata['created_by_admin']);
+            return $admin ? $admin->first_name . ' ' . $admin->last_name : null;
+        }
+        
+        return null;
+    }
 }

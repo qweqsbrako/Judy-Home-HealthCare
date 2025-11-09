@@ -398,6 +398,46 @@
   flex-shrink: 0;
 }
 
+
+.filter-wrapper {
+  min-width: 200px;
+  flex: 1;
+  max-width: 300px;
+}
+
+.filter-searchable {
+  width: 100%;
+}
+
+/* Adjust filters group to handle the new wrapper */
+.filters-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Make sure SearchableSelect in filters matches the styling */
+.filter-wrapper :deep(.searchable-select) {
+  min-width: 200px;
+}
+
+.filter-wrapper :deep(.searchable-select-trigger) {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  background: white;
+  min-height: 42px;
+}
+
+.filter-wrapper :deep(.searchable-select-trigger:focus) {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+
 .preview-image {
   width: 120px;
   height: 120px;

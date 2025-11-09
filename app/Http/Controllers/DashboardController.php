@@ -10,10 +10,11 @@ use App\Models\CarePlan;
 use App\Models\Schedule;
 use App\Models\TimeTracking;
 use App\Models\ProgressNote;
-// use App\Models\MedicalAssessment; // Commented out until table is created
 use App\Models\Driver;
 use App\Models\TransportRequest;
 use App\Models\IncidentReport;
+use App\Models\CareRequest;
+use App\Models\CarePayment;
 
 class DashboardController extends Controller
 {
@@ -61,17 +62,24 @@ class DashboardController extends Controller
             ->distinct('nurse_id')
             ->count('nurse_id');
         
-        // Financial summary (mock data - would need actual payment/billing tables)
-        $totalSpent = 0; // Replace with actual query
-        $pendingBills = 0; // Replace with actual query
-        $insuranceCovered = 0; // Replace with actual query
+        // Financial summary from CarePayment
+        $totalSpent = CarePayment::where('patient_id', $user->id)
+            ->where('status', 'completed')
+            ->sum('total_amount');
+        
+        $pendingBills = CarePayment::where('patient_id', $user->id)
+            ->whereIn('status', ['pending', 'processing'])
+            ->sum('total_amount');
+        
+        // Insurance covered (if you have this data, otherwise set to 0)
+        $insuranceCovered = 0;
         
         // Next appointment
         $nextAppointment = Schedule::whereHas('carePlan', function($q) use ($user) {
                 $q->where('patient_id', $user->id);
             })
             ->where('schedule_date', '>=', Carbon::today())
-            ->where('status', '!=', 'cancelled')
+            ->whereNotIn('status', ['cancelled', 'completed'])
             ->with('nurse:id,first_name,last_name')
             ->orderBy('schedule_date')
             ->orderBy('start_time')
@@ -83,13 +91,16 @@ class DashboardController extends Controller
             ->with('doctor:id,first_name,last_name')
             ->first();
         
+        // Upcoming appointments for the week
+        $upcomingAppointments = $this->getPatientUpcomingAppointments($user->id);
+        
         // Recent activity
         $recentActivity = $this->getPatientActivity($user->id);
         
-        // Health reminders (mock data - would need reminder table)
+        // Health reminders
         $healthReminders = $this->getHealthReminders($user->id);
         
-        // Alerts
+        // Alerts (including care requests)
         $alerts = $this->getPatientAlerts($user->id);
 
         return response()->json([
@@ -98,8 +109,8 @@ class DashboardController extends Controller
                 'totalSessions' => $totalSessions,
                 'vitalsRecorded' => $vitalsRecorded,
                 'assignedNurses' => $assignedNurses,
-                'totalSpent' => $totalSpent,
-                'pendingBills' => $pendingBills,
+                'totalSpent' => round($totalSpent, 2),
+                'pendingBills' => round($pendingBills, 2),
                 'insuranceCovered' => $insuranceCovered,
                 'nextAppointment' => $nextAppointment ? [
                     'time' => Carbon::parse($nextAppointment->start_time)->format('g:i A'),
@@ -123,6 +134,7 @@ class DashboardController extends Controller
                     'tasks' => $this->getCarePlanTasks($carePlan->id)
                 ] : null
             ],
+            'upcomingAppointments' => $upcomingAppointments,
             'recentActivity' => $recentActivity,
             'healthReminders' => $healthReminders,
             'alerts' => $alerts
@@ -139,7 +151,7 @@ class DashboardController extends Controller
         $today = Carbon::today();
         $weekStart = Carbon::now()->startOfWeek();
         
-        // Active patients (unique patients with active care plans assigned to this nurse)
+        // Active patients
         $activePatients = DB::table('schedules')
             ->join('care_plans', 'schedules.care_plan_id', '=', 'care_plans.id')
             ->where('schedules.nurse_id', $user->id)
@@ -150,7 +162,7 @@ class DashboardController extends Controller
             ->distinct('care_plans.patient_id')
             ->count('care_plans.patient_id');
         
-        // New patients this week (patients with care plans created this week and assigned to this nurse)
+        // New patients this week
         $newPatients = DB::table('schedules')
             ->join('care_plans', 'schedules.care_plan_id', '=', 'care_plans.id')
             ->where('schedules.nurse_id', $user->id)
@@ -189,7 +201,7 @@ class DashboardController extends Controller
         $overtimeHours = TimeTracking::where('nurse_id', $user->id)
             ->where('start_time', '>=', $weekStart)
             ->where('status', 'completed')
-            ->where('total_duration_minutes', '>', 480) // More than 8 hours
+            ->where('total_duration_minutes', '>', 480)
             ->sum(DB::raw('CASE WHEN total_duration_minutes > 480 THEN total_duration_minutes - 480 ELSE 0 END')) / 60;
         
         // Average rating (mock - would need rating table)
@@ -206,30 +218,45 @@ class DashboardController extends Controller
             ->whereMonth('visit_date', Carbon::now()->month)
             ->count();
         
-        // Today's schedule
+        // Today's schedule with full details
         $todaysSchedule = Schedule::where('nurse_id', $user->id)
             ->whereDate('schedule_date', $today)
-            ->with(['carePlan.patient:id,first_name,last_name', 'carePlan:id,care_type,priority,patient_id'])
+            ->with([
+                'carePlan.patient:id,first_name,last_name,avatar',
+                'carePlan:id,care_type,priority,patient_id'
+            ])
             ->orderBy('start_time')
             ->get()
             ->map(function($schedule) {
+                $startTime = Carbon::parse($schedule->schedule_date . ' ' . $schedule->start_time);
+                $endTime = Carbon::parse($schedule->schedule_date . ' ' . $schedule->end_time);
+                $durationMinutes = $startTime->diffInMinutes($endTime);
+                $durationHours = floor($durationMinutes / 60);
+                $durationRemainder = $durationMinutes % 60;
+                $duration = $durationHours > 0 
+                    ? ($durationRemainder > 0 ? "{$durationHours}h {$durationRemainder}m" : "{$durationHours}h")
+                    : "{$durationRemainder}m";
+
                 return [
                     'id' => $schedule->id,
-                    'time' => Carbon::parse($schedule->start_time)->format('H:i'),
-                    'duration' => $schedule->duration ?? '1h',
+                    'time' => $startTime->format('g:i A'),
+                    'duration' => $duration,
                     'patient_name' => $schedule->carePlan && $schedule->carePlan->patient 
                         ? $schedule->carePlan->patient->first_name . ' ' . $schedule->carePlan->patient->last_name
                         : 'Unknown Patient',
                     'patient_id' => $schedule->carePlan->patient_id ?? null,
+                    'patient_avatar' => $schedule->carePlan && $schedule->carePlan->patient 
+                        ? ($schedule->carePlan->patient->avatar ?? 'https://ui-avatars.com/api/?name=' . urlencode($schedule->carePlan->patient->first_name . '+' . $schedule->carePlan->patient->last_name) . '&background=e3f2fd')
+                        : 'https://ui-avatars.com/api/?name=Unknown&background=e3f2fd',
                     'care_type' => $schedule->carePlan->care_type ?? 'General Care',
-                    'location' => $schedule->location ?? 'Not specified',
+                    'location' => $schedule->location ?? 'Patient Home',
                     'status' => $schedule->status,
                     'priority' => $schedule->carePlan->priority ?? 'medium'
                 ];
             });
         
-        // Recent patients
-        $recentPatients = $this->getNurseRecentPatients($user->id);
+        // Upcoming appointments
+        $upcomingAppointments = $this->getNurseUpcomingAppointments($user->id);
         
         // Recent activity
         $recentActivity = $this->getNurseActivity($user->id);
@@ -251,7 +278,7 @@ class DashboardController extends Controller
                 'notesWritten' => $notesWritten
             ],
             'todaysSchedule' => $todaysSchedule,
-            'recentPatients' => $recentPatients,
+            'upcomingAppointments' => $upcomingAppointments,
             'recentActivity' => $recentActivity,
             'alerts' => $alerts
         ]);
@@ -284,14 +311,17 @@ class DashboardController extends Controller
             ->distinct('patient_id')
             ->count('patient_id');
         
-        // Recent assessments - TEMPORARY FIX: Using mock data until MedicalAssessment table is created
-        $recentAssessments = 0; // Would be: MedicalAssessment::where('doctor_id', $user->id)->whereMonth('created_at', Carbon::now()->month)->count();
+        // Recent assessments
+        $recentAssessments = 0;
         
-        // Pending reviews (care plans needing approval)
+        // Pending reviews
         $pendingReviews = CarePlan::where('status', 'pending_approval')
             ->count();
         
-        // Care team schedules (schedules for this doctor's care plans)
+        // Upcoming appointments
+        $upcomingAppointments = $this->getDoctorUpcomingAppointments($user->id);
+        
+        // Care team schedules
         $careTeamSchedules = $this->getDoctorCareTeamSchedules($user->id);
         
         // Recent activity
@@ -309,6 +339,7 @@ class DashboardController extends Controller
                 'recentAssessments' => $recentAssessments,
                 'pendingReviews' => $pendingReviews
             ],
+            'upcomingAppointments' => $upcomingAppointments,
             'careTeamSchedules' => $careTeamSchedules,
             'recentActivity' => $recentActivity,
             'alerts' => $alerts
@@ -324,12 +355,13 @@ class DashboardController extends Controller
     {
         $today = Carbon::today();
         $thisMonth = Carbon::now()->startOfMonth();
+        $lastMonth = Carbon::now()->subMonth()->startOfMonth();
         $thisWeek = Carbon::now()->startOfWeek();
         
         // Total users
         $totalUsers = User::count();
         
-        // Active users (logged in within last 7 days)
+        // Active users
         $activeUsers = User::where('last_login_at', '>=', Carbon::now()->subDays(7))
             ->count();
         
@@ -337,17 +369,30 @@ class DashboardController extends Controller
         $pendingVerifications = User::where('verification_status', 'pending')
             ->count();
         
-        // Monthly revenue (mock - would need actual billing tables)
-        $monthlyRevenue = 0;
+        // Monthly revenue from CarePayment
+        $monthlyRevenue = CarePayment::where('status', 'completed')
+            ->where('paid_at', '>=', $thisMonth)
+            ->sum('total_amount');
         
-        // Revenue growth (mock)
-        $revenueGrowth = 0;
+        // Last month revenue for growth calculation
+        $lastMonthRevenue = CarePayment::where('status', 'completed')
+            ->where('paid_at', '>=', $lastMonth)
+            ->where('paid_at', '<', $thisMonth)
+            ->sum('total_amount');
         
-        // Average bill (mock)
-        $avgBill = 0;
+        // Revenue growth percentage
+        $revenueGrowth = $lastMonthRevenue > 0 
+            ? round((($monthlyRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 1)
+            : 0;
+        
+        // Average bill
+        $completedPayments = CarePayment::where('status', 'completed')
+            ->where('paid_at', '>=', $thisMonth)
+            ->count();
+        $avgBill = $completedPayments > 0 ? round($monthlyRevenue / $completedPayments, 2) : 0;
         
         // Open incidents
-        $openIncidents = IncidentReport::whereIn('status', ['open', 'investigating'])
+        $openIncidents = IncidentReport::whereIn('status', ['pending', 'investigated'])
             ->count();
         
         // Resolved incidents today
@@ -355,16 +400,29 @@ class DashboardController extends Controller
             ->whereDate('updated_at', $today)
             ->count();
         
-        $qualityScore = 0;
+        // Quality score (percentage of completed schedules vs total)
+        $totalSchedules = Schedule::where('schedule_date', '<', $today)
+            ->where('schedule_date', '>=', $thisMonth)
+            ->count();
+        $completedSchedules = Schedule::where('schedule_date', '<', $today)
+            ->where('schedule_date', '>=', $thisMonth)
+            ->where('status', 'completed')
+            ->count();
+        $qualityScore = $totalSchedules > 0 
+            ? round(($completedSchedules / $totalSchedules) * 100, 1)
+            : 0;
         
         // Recent activity
         $recentActivity = $this->getAdminActivity();
         
-        // Alerts
+        // Alerts (including care requests)
         $alerts = $this->getAdminAlerts();
         
         // Recent finance records
         $recentFinanceRecords = $this->getRecentFinanceRecords();
+        
+        // Recent care requests
+        $recentCareRequests = $this->getRecentCareRequests();
         
         // Transportation requests
         $transportationRequests = TransportRequest::whereIn('status', ['pending', 'assigned'])
@@ -424,6 +482,18 @@ class DashboardController extends Controller
             ->where('verification_status', 'verified')
             ->where('verified_at', '>=', $thisWeek)
             ->count();
+        
+        // Daily revenue
+        $dailyRevenue = CarePayment::where('status', 'completed')
+            ->whereDate('paid_at', $today)
+            ->sum('total_amount');
+        
+        // Pending payments
+        $pendingPayments = CarePayment::whereIn('status', ['pending', 'processing'])
+            ->sum('total_amount');
+        
+        // Upcoming appointments (all schedules)
+        $upcomingAppointments = $this->getAdminUpcomingAppointments();
 
         return response()->json([
             'user' => $user,
@@ -431,7 +501,7 @@ class DashboardController extends Controller
                 'totalUsers' => $totalUsers,
                 'activeUsers' => $activeUsers,
                 'pendingVerifications' => $pendingVerifications,
-                'monthlyRevenue' => $monthlyRevenue,
+                'monthlyRevenue' => round($monthlyRevenue, 2),
                 'revenueGrowth' => $revenueGrowth,
                 'avgBill' => $avgBill,
                 'openIncidents' => $openIncidents,
@@ -440,7 +510,9 @@ class DashboardController extends Controller
             ],
             'recentActivity' => $recentActivity,
             'alerts' => $alerts,
+            'upcomingAppointments' => $upcomingAppointments,
             'recentFinanceRecords' => $recentFinanceRecords,
+            'recentCareRequests' => $recentCareRequests,
             'transportationRequests' => $transportationRequests,
             'careManagementSchedules' => $careManagementSchedules,
             'recentNurseApplications' => $recentNurseApplications,
@@ -450,8 +522,8 @@ class DashboardController extends Controller
                 'approvedThisWeek' => $approvedThisWeek
             ],
             'financeSummary' => [
-                'dailyRevenue' => 2450,
-                'pendingPayments' => 1850
+                'dailyRevenue' => round($dailyRevenue, 2),
+                'pendingPayments' => round($pendingPayments, 2)
             ]
         ]);
     }
@@ -485,7 +557,183 @@ class DashboardController extends Controller
                 ];
             });
         
-        return $vitals->take(5);
+        // Recent payments
+        $payments = CarePayment::where('patient_id', $patientId)
+            ->where('status', 'completed')
+            ->orderBy('paid_at', 'desc')
+            ->limit(2)
+            ->get()
+            ->map(function($payment) {
+                return [
+                    'id' => $payment->id,
+                    'type' => 'payment',
+                    'title' => 'Payment Completed',
+                    'description' => $payment->description . ' - GHS ' . number_format($payment->total_amount, 2),
+                    'user' => 'Payment System',
+                    'status' => 'completed',
+                    'created_at' => $payment->paid_at
+                ];
+            });
+        
+        return $activities->merge($vitals)->merge($payments)->sortByDesc('created_at')->take(5)->values();
+    }
+
+    private function getPatientUpcomingAppointments($patientId)
+    {
+        return Schedule::whereHas('carePlan', function($q) use ($patientId) {
+                $q->where('patient_id', $patientId);
+            })
+            ->where('schedule_date', '>', Carbon::today())
+            ->where('schedule_date', '<=', Carbon::now()->addWeek())
+            ->whereNotIn('status', ['cancelled', 'completed'])
+            ->with('nurse:id,first_name,last_name')
+            ->orderBy('schedule_date')
+            ->orderBy('start_time')
+            ->limit(5)
+            ->get()
+            ->map(function($schedule) {
+                $scheduleDate = Carbon::parse($schedule->schedule_date);
+                return [
+                    'id' => $schedule->id,
+                    'name' => $schedule->nurse 
+                        ? $schedule->nurse->first_name . ' ' . $schedule->nurse->last_name . ', RN'
+                        : 'Nurse TBD',
+                    'day' => $scheduleDate->format('d'),
+                    'month' => $scheduleDate->format('M'),
+                    'time' => Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'type' => $schedule->shift_type ?? 'Care Visit',
+                    'status' => $schedule->status,
+                    'condition' => $schedule->carePlan->care_type ?? 'General Care',
+                    'priority' => $schedule->carePlan->priority ?? 'medium',
+                    'nextVisit' => $scheduleDate->format('l, F j') . ' at ' . Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'medications' => 0, // Would need medication table
+                    'lastVisit' => 'N/A'
+                ];
+            });
+    }
+
+    private function getNurseUpcomingAppointments($nurseId)
+    {
+        return Schedule::where('nurse_id', $nurseId)
+            ->where('schedule_date', '>', Carbon::today())
+            ->where('schedule_date', '<=', Carbon::now()->addWeek())
+            ->whereNotIn('status', ['cancelled', 'completed'])
+            ->with([
+                'carePlan.patient:id,first_name,last_name,avatar',
+                'carePlan:id,patient_id,care_type,priority'
+            ])
+            ->orderBy('schedule_date')
+            ->orderBy('start_time')
+            ->limit(5)
+            ->get()
+            ->map(function($schedule) {
+                $scheduleDate = Carbon::parse($schedule->schedule_date);
+                return [
+                    'id' => $schedule->id,
+                    'name' => $schedule->carePlan && $schedule->carePlan->patient
+                        ? $schedule->carePlan->patient->first_name . ' ' . $schedule->carePlan->patient->last_name
+                        : 'Patient',
+                    'day' => $scheduleDate->format('d'),
+                    'month' => $scheduleDate->format('M'),
+                    'time' => Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'type' => $schedule->shift_type ?? 'Care Visit',
+                    'status' => $schedule->status,
+                    'condition' => $schedule->carePlan->care_type ?? 'General Care',
+                    'priority' => $schedule->carePlan->priority ?? 'medium',
+                    'nextVisit' => $scheduleDate->format('l, F j') . ' at ' . Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'medications' => 0,
+                    'lastVisit' => 'N/A'
+                ];
+            });
+    }
+
+    private function getDoctorUpcomingAppointments($doctorId)
+    {
+        $carePlanIds = CarePlan::where('doctor_id', $doctorId)
+            ->where('status', 'active')
+            ->pluck('id');
+
+        if ($carePlanIds->isEmpty()) {
+            return collect([]);
+        }
+
+        return Schedule::whereIn('care_plan_id', $carePlanIds)
+            ->where('schedule_date', '>', Carbon::today())
+            ->where('schedule_date', '<=', Carbon::now()->addWeek())
+            ->whereNotIn('status', ['cancelled', 'completed'])
+            ->with([
+                'nurse:id,first_name,last_name',
+                'carePlan.patient:id,first_name,last_name',
+                'carePlan:id,patient_id,care_type,priority'
+            ])
+            ->orderBy('schedule_date')
+            ->orderBy('start_time')
+            ->limit(5)
+            ->get()
+            ->map(function($schedule) {
+                $scheduleDate = Carbon::parse($schedule->schedule_date);
+                return [
+                    'id' => $schedule->id,
+                    'name' => $schedule->carePlan && $schedule->carePlan->patient
+                        ? $schedule->carePlan->patient->first_name . ' ' . $schedule->carePlan->patient->last_name
+                        : 'Patient',
+                    'day' => $scheduleDate->format('d'),
+                    'month' => $scheduleDate->format('M'),
+                    'time' => Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'type' => $schedule->shift_type ?? 'Care Visit',
+                    'status' => $schedule->status,
+                    'condition' => $schedule->carePlan->care_type ?? 'General Care',
+                    'priority' => $schedule->carePlan->priority ?? 'medium',
+                    'nurse' => $schedule->nurse 
+                        ? $schedule->nurse->first_name . ' ' . $schedule->nurse->last_name
+                        : 'Not assigned',
+                    'nextVisit' => $scheduleDate->format('l, F j') . ' at ' . Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'medications' => 0,
+                    'lastVisit' => 'N/A'
+                ];
+            });
+    }
+
+    private function getAdminUpcomingAppointments()
+    {
+        return Schedule::where('schedule_date', '>', Carbon::today())
+            ->where('schedule_date', '<=', Carbon::now()->addWeek())
+            ->whereNotIn('status', ['cancelled', 'completed'])
+            ->with([
+                'nurse:id,first_name,last_name',
+                'carePlan.patient:id,first_name,last_name',
+                'carePlan:id,patient_id,care_type,priority'
+            ])
+            ->orderBy('schedule_date')
+            ->orderBy('start_time')
+            ->limit(5)
+            ->get()
+            ->map(function($schedule) {
+                $scheduleDate = Carbon::parse($schedule->schedule_date);
+                $patientName = $schedule->carePlan && $schedule->carePlan->patient
+                    ? $schedule->carePlan->patient->first_name . ' ' . $schedule->carePlan->patient->last_name
+                    : 'Unknown Patient';
+                $nurseName = $schedule->nurse 
+                    ? $schedule->nurse->first_name . ' ' . $schedule->nurse->last_name
+                    : 'Not assigned';
+                
+                return [
+                    'id' => $schedule->id,
+                    'name' => 'Patient: ' . $patientName . ' | Nurse: ' . $nurseName,
+                    'day' => $scheduleDate->format('d'),
+                    'month' => $scheduleDate->format('M'),
+                    'time' => Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'type' => $schedule->shift_type ?? 'Care Visit',
+                    'status' => $schedule->status,
+                    'condition' => $schedule->carePlan->care_type ?? 'General Care',
+                    'priority' => $schedule->carePlan->priority ?? 'medium',
+                    'nurse' => $nurseName,
+                    'patient' => $patientName,
+                    'nextVisit' => $scheduleDate->format('l, F j') . ' at ' . Carbon::parse($schedule->start_time)->format('g:i A'),
+                    'medications' => 0,
+                    'lastVisit' => 'N/A'
+                ];
+            });
     }
 
     private function getNurseActivity($nurseId)
@@ -510,25 +758,7 @@ class DashboardController extends Controller
                 ];
             });
         
-        // Recent incidents (if any were reported by this nurse)
-        $incidents = IncidentReport::where('reported_by', $nurseId)
-            ->orderBy('created_at', 'desc')
-            ->limit(2)
-            ->with('patient:id,first_name,last_name')
-            ->get()
-            ->map(function($incident) {
-                return [
-                    'id' => $incident->id,
-                    'type' => 'incident',
-                    'title' => 'Incident Reported',
-                    'description' => $incident->incident_type . ' incident reported',
-                    'user' => 'You',
-                    'status' => $incident->status,
-                    'created_at' => $incident->created_at
-                ];
-            });
-        
-        return $activities->merge($notes)->merge($incidents)->sortByDesc('created_at')->take(5)->values();
+        return $notes;
     }
 
     private function getDoctorActivity($doctorId)
@@ -575,57 +805,106 @@ class DashboardController extends Controller
                 ];
             });
         
-        // Recent incidents
-        $incidents = IncidentReport::orderBy('created_at', 'desc')
+        // Recent care requests
+        $careRequests = CareRequest::orderBy('created_at', 'desc')
             ->limit(2)
-            ->with('reporter:id,first_name,last_name')
+            ->with('patient:id,first_name,last_name')
             ->get()
-            ->map(function($incident) {
+            ->map(function($request) {
                 return [
-                    'id' => $incident->id,
-                    'type' => 'incident',
-                    'title' => 'Incident Reported',
-                    'description' => $incident->incident_type . ' - ' . $incident->severity,
-                    'user' => $incident->reporter ? $incident->reporter->first_name . ' ' . $incident->reporter->last_name : 'Staff',
-                    'status' => $incident->status,
-                    'created_at' => $incident->created_at
+                    'id' => $request->id,
+                    'type' => 'assignment',
+                    'title' => 'New Care Request',
+                    'description' => ($request->patient ? $request->patient->first_name . ' ' . $request->patient->last_name : 'Patient') . ' requested ' . $request->care_type,
+                    'user' => 'Patient Portal',
+                    'status' => $request->status,
+                    'created_at' => $request->created_at
                 ];
             });
         
-        return $activities->merge($verifications)->merge($incidents)->sortByDesc('created_at')->take(5)->values();
+        // Recent payments
+        $payments = CarePayment::where('status', 'completed')
+            ->orderBy('paid_at', 'desc')
+            ->limit(2)
+            ->with('patient:id,first_name,last_name')
+            ->get()
+            ->map(function($payment) {
+                return [
+                    'id' => $payment->id,
+                    'type' => 'payment',
+                    'title' => 'Payment Received',
+                    'description' => 'GHS ' . number_format($payment->total_amount, 2) . ' from ' . ($payment->patient ? $payment->patient->first_name . ' ' . $payment->patient->last_name : 'patient'),
+                    'user' => 'Payment System',
+                    'status' => 'completed',
+                    'created_at' => $payment->paid_at
+                ];
+            });
+        
+        return $activities->merge($verifications)->merge($careRequests)->merge($payments)->sortByDesc('created_at')->take(5)->values();
     }
 
     private function getPatientAlerts($patientId)
     {
         $alerts = collect();
         
-        // Check for abnormal vitals
-        $recentVitals = ProgressNote::where('patient_id', $patientId)
-            ->whereNotNull('vitals')
-            ->where('visit_date', '>=', Carbon::now()->subDays(7))
-            ->orderBy('visit_date', 'desc')
-            ->first();
+        // Pending care requests
+        $pendingRequests = CareRequest::where('patient_id', $patientId)
+            ->where('status', 'pending_payment')
+            ->get();
         
-        if ($recentVitals && isset($recentVitals->vitals['blood_pressure'])) {
-            // Example: Check for high BP
+        foreach ($pendingRequests as $request) {
             $alerts->push([
-                'id' => 1,
+                'id' => 'request_' . $request->id,
                 'type' => 'warning',
-                'title' => 'Vital Signs Review',
-                'message' => 'Your recent blood pressure reading requires monitoring',
-                'actionRequired' => false,
-                'created_at' => $recentVitals->visit_date
+                'title' => 'Payment Required',
+                'message' => 'Complete payment for your ' . $request->care_type . ' care request',
+                'actionRequired' => true,
+                'created_at' => $request->created_at
             ]);
         }
         
-        return $alerts;
+        // Awaiting care payment
+        $awaitingCarePayment = CareRequest::where('patient_id', $patientId)
+            ->where('status', 'awaiting_care_payment')
+            ->get();
+        
+        foreach ($awaitingCarePayment as $request) {
+            $alerts->push([
+                'id' => 'care_payment_' . $request->id,
+                'type' => 'info',
+                'title' => 'Care Plan Ready',
+                'message' => 'Your care plan is ready. Complete payment to begin care',
+                'actionRequired' => true,
+                'created_at' => $request->updated_at
+            ]);
+        }
+        
+        // Pending payment reminders
+        $pendingPayments = CarePayment::where('patient_id', $patientId)
+            ->whereIn('status', ['pending', 'processing'])
+            ->get();
+        
+        foreach ($pendingPayments as $payment) {
+            if ($payment->expires_at && $payment->expires_at->isPast()) {
+                $alerts->push([
+                    'id' => 'payment_' . $payment->id,
+                    'type' => 'critical',
+                    'title' => 'Payment Expired',
+                    'message' => 'Payment for ' . $payment->description . ' has expired',
+                    'actionRequired' => true,
+                    'created_at' => $payment->expires_at
+                ]);
+            }
+        }
+        
+        return $alerts->sortByDesc('created_at')->values();
     }
 
     private function getNurseAlerts($nurseId)
     {
         $alerts = collect();
         
-        // Critical patients using proper query structure
+        // Critical patients
         $criticalPatients = DB::table('schedules')
             ->join('care_plans', 'schedules.care_plan_id', '=', 'care_plans.id')
             ->where('schedules.nurse_id', $nurseId)
@@ -641,6 +920,24 @@ class DashboardController extends Controller
                 'type' => 'critical',
                 'title' => 'Critical Patient Alert',
                 'message' => "You have {$criticalPatients} critical priority patient(s) in your schedule",
+                'actionRequired' => true,
+                'created_at' => Carbon::now()
+            ]);
+        }
+        
+        // Unconfirmed schedules
+        $unconfirmedSchedules = Schedule::where('nurse_id', $nurseId)
+            ->where('schedule_date', '>=', Carbon::today())
+            ->whereNull('nurse_confirmed_at')
+            ->whereIn('status', ['scheduled'])
+            ->count();
+        
+        if ($unconfirmedSchedules > 0) {
+            $alerts->push([
+                'id' => 2,
+                'type' => 'warning',
+                'title' => 'Unconfirmed Schedules',
+                'message' => "{$unconfirmedSchedules} schedule(s) need your confirmation",
                 'actionRequired' => true,
                 'created_at' => Carbon::now()
             ]);
@@ -689,12 +986,42 @@ class DashboardController extends Controller
             ]);
         }
         
+        // Pending care requests
+        $pendingCareRequests = CareRequest::where('status', 'payment_received')
+            ->count();
+        
+        if ($pendingCareRequests > 0) {
+            $alerts->push([
+                'id' => 2,
+                'type' => 'info',
+                'title' => 'Pending Care Requests',
+                'message' => "{$pendingCareRequests} care request(s) need nurse assignment",
+                'actionRequired' => true,
+                'created_at' => Carbon::now()
+            ]);
+        }
+        
+        // Under review requests
+        $underReview = CareRequest::where('status', 'under_review')
+            ->count();
+        
+        if ($underReview > 0) {
+            $alerts->push([
+                'id' => 3,
+                'type' => 'warning',
+                'title' => 'Care Requests Under Review',
+                'message' => "{$underReview} care request(s) under review need care cost issuance",
+                'actionRequired' => true,
+                'created_at' => Carbon::now()
+            ]);
+        }
+        
         // Open incidents
         $openIncidents = IncidentReport::where('status', 'open')->count();
         
         if ($openIncidents > 0) {
             $alerts->push([
-                'id' => 2,
+                'id' => 4,
                 'type' => 'critical',
                 'title' => 'Open Incident Reports',
                 'message' => "{$openIncidents} incident(s) require immediate attention",
@@ -708,52 +1035,84 @@ class DashboardController extends Controller
 
     private function getHealthReminders($patientId)
     {
-        // Mock data - would need actual reminder/medication tables
         return [];
     }
 
     private function getCarePlanTasks($carePlanId)
     {
-        // Mock data - would need actual task table
         return [];
-    }
-
-    private function getNurseRecentPatients($nurseId)
-    {
-        return Schedule::where('nurse_id', $nurseId)
-            ->where('schedule_date', '>=', Carbon::now()->subDays(7))
-            ->where('status', 'completed')
-            ->with([
-                'carePlan:id,patient_id,care_type',
-                'carePlan.patient:id,first_name,last_name,avatar'
-            ])
-            ->orderBy('schedule_date', 'desc')
-            ->limit(10)
-            ->get()
-            ->unique(function($schedule) {
-                return $schedule->carePlan && $schedule->carePlan->patient ? $schedule->carePlan->patient->id : null;
-            })
-            ->filter(function($schedule) {
-                return $schedule->carePlan && $schedule->carePlan->patient;
-            })
-            ->map(function($schedule) {
-                return [
-                    'id' => $schedule->carePlan->patient->id,
-                    'name' => $schedule->carePlan->patient->first_name . ' ' . $schedule->carePlan->patient->last_name,
-                    'condition' => $schedule->carePlan->care_type ?? 'General Care',
-                    'avatar' => $schedule->carePlan->patient->avatar ?? 'https://ui-avatars.com/api/?name=' . urlencode($schedule->carePlan->patient->first_name . '+' . $schedule->carePlan->patient->last_name) . '&background=e3f2fd',
-                    'status' => 'stable',
-                    'lastVisit' => Carbon::parse($schedule->schedule_date)->diffForHumans()
-                ];
-            })
-            ->take(5)
-            ->values();
     }
 
     private function getRecentFinanceRecords()
     {
-        // Mock data - would need actual payment/billing tables
-        return [];
+        return CarePayment::where('status', 'completed')
+            ->orderBy('paid_at', 'desc')
+            ->limit(10)
+            ->with('patient:id,first_name,last_name')
+            ->get()
+            ->map(function($payment) {
+                return [
+                    'id' => $payment->id,
+                    'patientName' => $payment->patient 
+                        ? $payment->patient->first_name . ' ' . $payment->patient->last_name
+                        : 'Unknown',
+                    'amount' => $payment->total_amount,
+                    'type' => $payment->payment_type,
+                    'description' => $payment->description,
+                    'paidAt' => $payment->paid_at,
+                    'reference' => $payment->reference_number
+                ];
+            });
+    }
+
+    private function getRecentCareRequests()
+    {
+        return CareRequest::orderBy('created_at', 'desc')
+            ->limit(5)
+            ->with([
+                'patient:id,first_name,last_name,phone,email',
+                'assignedNurse:id,first_name,last_name',
+                'assessmentPayment',
+                'carePayment'
+            ])
+            ->get()
+            ->map(function($request) {
+                return [
+                    'id' => $request->id,
+                    'patient' => $request->patient ? [
+                        'id' => $request->patient->id,
+                        'name' => $request->patient->first_name . ' ' . $request->patient->last_name,
+                        'phone' => $request->patient->phone,
+                        'email' => $request->patient->email
+                    ] : null,
+                    'assignedNurse' => $request->assignedNurse ? [
+                        'id' => $request->assignedNurse->id,
+                        'name' => $request->assignedNurse->first_name . ' ' . $request->assignedNurse->last_name
+                    ] : null,
+                    'care_type' => $request->care_type,
+                    'urgency_level' => $request->urgency_level,
+                    'description' => $request->description,
+                    'status' => $request->status,
+                    'formatted_status' => $request->formatted_status,
+                    'service_address' => $request->service_address,
+                    'city' => $request->city,
+                    'region' => $request->region,
+                    'preferred_start_date' => $request->preferred_start_date,
+                    'assessment_scheduled_at' => $request->assessment_scheduled_at,
+                    'created_at' => $request->created_at,
+                    'updated_at' => $request->updated_at,
+                    'assessment_payment' => $request->assessmentPayment ? [
+                        'id' => $request->assessmentPayment->id,
+                        'amount' => $request->assessmentPayment->total_amount,
+                        'status' => $request->assessmentPayment->status
+                    ] : null,
+                    'care_payment' => $request->carePayment ? [
+                        'id' => $request->carePayment->id,
+                        'amount' => $request->carePayment->total_amount,
+                        'status' => $request->carePayment->status
+                    ] : null
+                ];
+            });
     }
 
     private function getCareManagementSchedules()
@@ -787,15 +1146,11 @@ class DashboardController extends Controller
             });
     }
 
-    /**
-     * Get care team schedules for doctor's care plans
-     */
     private function getDoctorCareTeamSchedules($doctorId)
     {
         $today = Carbon::today();
         $nextWeek = Carbon::now()->addWeek();
         
-        // Get care plans created by this doctor
         $carePlanIds = CarePlan::where('doctor_id', $doctorId)
             ->where('status', 'active')
             ->pluck('id');
@@ -804,7 +1159,6 @@ class DashboardController extends Controller
             return [];
         }
         
-        // Get schedules for these care plans for the next 7 days
         $schedules = Schedule::whereIn('care_plan_id', $carePlanIds)
             ->where('schedule_date', '>=', $today)
             ->where('schedule_date', '<=', $nextWeek)
@@ -863,7 +1217,7 @@ class DashboardController extends Controller
                 ];
             })
             ->values()
-            ->take(7); // Limit to 7 days
+            ->take(7);
         
         return $schedules;
     }

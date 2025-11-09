@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Mail\UserInvitationMail;
 use Illuminate\Support\Facades\Mail;
+use App\Notifications\UserInvitationNotification;
 
 class MedicalAssessmentController extends Controller
 {
@@ -765,9 +766,9 @@ class MedicalAssessmentController extends Controller
         // Generate email and password for the patient
         $firstName = $request->patient_first_name;
         $lastName = $request->patient_last_name;
-        $email = $this->generatePatientEmail($firstName, $lastName);
+        $email = $request->patient_email ?? $this->generatePatientEmail($firstName, $lastName);
         $temporaryPassword = Str::random(12);
-
+        
         $patientData = [
             'first_name' => $firstName,
             'last_name' => $lastName,
@@ -784,18 +785,16 @@ class MedicalAssessmentController extends Controller
             'verified_by' => $request->nurse_id,
             'verified_at' => now(),
         ];
-
+        
         $patient = User::create($patientData);
-
-         try {
-                Mail::to($email)->send(new UserInvitationMail($patientData, $temporaryPassword));
-        } 
-        catch (\Exception $e) {
-                \Log::error('Failed to send invitation email: ' . $e->getMessage());
+        
+        try {
+            // Pass the User model instance, not the array
+            $patient->notify(new UserInvitationNotification($temporaryPassword));
+        } catch (\Exception $e) {
+            \Log::error('Failed to send invitation email: ' . $e->getMessage());
         }
-        // TODO: Send email with temporary password or SMS
-        // This would be implemented based on your notification preferences
-
+        
         return $patient;
     }
 

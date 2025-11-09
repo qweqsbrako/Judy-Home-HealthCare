@@ -295,13 +295,48 @@ class TransportRequestController extends Controller
             ], 422);
         }
 
-        $transportRequest->assignDriver($request->driver_id);
+        DB::beginTransaction();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Driver assigned successfully!',
-            'data' => $transportRequest->load(['patient', 'requestedBy', 'driver'])
-        ]);
+        try {
+            $transportRequest->assignDriver($request->driver_id);
+
+            // Get the driver user account to send notification
+            $driverUser = $driver->user; // Assuming Driver model has a user relationship
+            
+            if ($driverUser) {
+                // Send notification to driver (SMS + FCM + Email)
+                $driverUser->notify(new \App\Notifications\TransportDriverAssignedNotification($transportRequest));
+                
+                \Log::info('Driver assignment notification queued', [
+                    'transport_request_id' => $transportRequest->id,
+                    'driver_id' => $driver->id,
+                    'driver_user_id' => $driverUser->id
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Driver assigned successfully! Notification sent.',
+                'data' => $transportRequest->load(['patient', 'requestedBy', 'driver'])
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            \Log::error('Failed to assign driver', [
+                'transport_request_id' => $transportRequest->id,
+                'driver_id' => $request->driver_id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign driver.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**
@@ -515,6 +550,17 @@ class TransportRequestController extends Controller
 
         if ($availableDriver) {
             $transportRequest->assignDriver($availableDriver->id);
+            
+            // Send notification to auto-assigned driver
+            $driverUser = $availableDriver->user;
+            if ($driverUser) {
+                $driverUser->notify(new \App\Notifications\TransportDriverAssignedNotification($transportRequest));
+                
+                \Log::info('Emergency transport auto-assigned with notification', [
+                    'transport_request_id' => $transportRequest->id,
+                    'driver_id' => $availableDriver->id
+                ]);
+            }
         }
     }
 

@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Mail\UserInvitationMail;
+use App\Notifications\UserInvitationNotification;
+use App\Notifications\PasswordChangedNotification;
 use App\Http\Resources\UserResource;
 use Carbon\Carbon;
 
@@ -234,7 +236,8 @@ class PatientController extends Controller
             // Send invitation email if requested
             if ($request->send_invite) {
                 try {
-                    Mail::to($patient->email)->send(new UserInvitationMail($patient, $temporaryPassword));
+                    $patient->notify(new UserInvitationNotification($temporaryPassword));
+                    
                 } catch (\Exception $e) {
                     \Log::error('Failed to send invitation email: ' . $e->getMessage());
                 }
@@ -716,6 +719,13 @@ class PatientController extends Controller
                 'force_password_change' => false
             ]);
 
+            try {
+                $patient->notify(new PasswordChangedNotification($request->new_password));
+                    
+            } catch (\Exception $e) {
+                \Log::error('Failed to send invitation email: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Password changed successfully'
@@ -751,7 +761,8 @@ class PatientController extends Controller
             ]);
 
             try {
-                Mail::to($patient->email)->send(new UserInvitationMail($patient, $temporaryPassword));
+                $patient->notify(new UserInvitationNotification($temporaryPassword));
+
             } catch (\Exception $e) {
                 \Log::error('Failed to send password reset email: ' . $e->getMessage());
                 
