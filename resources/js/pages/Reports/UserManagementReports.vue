@@ -49,7 +49,7 @@
                 />
               </div>
             </div>
-            <div class="form-group">
+            <!-- <div class="form-group">
               <label>Role Filter</label>
               <select v-model="filters.role" @change="applyFilters" class="form-control">
                 <option value="all">All Roles</option>
@@ -59,7 +59,7 @@
                 <option value="admin">Admins</option>
                 <option value="superadmin">Super Admins</option>
               </select>
-            </div>
+            </div> -->
           </div>
         </div>
 
@@ -265,7 +265,7 @@
                       <th>Ghana Card</th>
                       <th>Registration Date</th>
                       <th>Waiting Time</th>
-                      <th>Actions</th>
+                      <!-- <th>Actions</th> -->
                     </tr>
                   </thead>
                   <tbody>
@@ -284,7 +284,7 @@
                       <td>{{ user.ghana_card_number }}</td>
                       <td>{{ formatDate(user.created_at) }}</td>
                       <td>{{ formatTimeAgo(user.created_at) }}</td>
-                      <td>
+                      <!-- <td>
                         <div class="button-group">
                           <button @click="verifyUserHandler(user.id)" class="btn btn-sm btn-success">
                             Verify
@@ -293,7 +293,7 @@
                             Reject
                           </button>
                         </div>
-                      </td>
+                      </td> -->
                     </tr>
                   </tbody>
                 </table>
@@ -589,10 +589,19 @@ const renderVerificationTrendsChart = () => {
   })
   
   const dates = [...new Set(data.map(item => item.date))].sort()
-  const datasets = Object.keys(groupedData).map((status, index) => ({
+  
+  // Define color mapping for verification statuses
+  const statusColors = {
+    'verified': '#10b981',   // Green
+    'rejected': '#ef4444',   // Red
+    'pending': '#f59e0b',    // Orange/Amber
+    'suspended': '#6b7280'   // Gray
+  }
+  
+  const datasets = Object.keys(groupedData).map((status) => ({
     label: capitalizeFirst(status),
     data: dates.map(date => groupedData[status][date] || 0),
-    borderColor: ['#10b981', '#ef4444', '#f59e0b'][index] || '#6b7280',
+    borderColor: statusColors[status.toLowerCase()] || '#6b7280',
     backgroundColor: 'transparent',
     tension: 0.4
   }))

@@ -12,6 +12,7 @@ use App\Models\MedicalAssessment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Http\Response;
 
 class QualityReportingController extends Controller
 {
@@ -21,15 +22,12 @@ class QualityReportingController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $timeframe = $request->get('timeframe', '30'); // days
-            $dateFrom = Carbon::now()->subDays($timeframe);
-            
             $data = [
-                'overview' => $this->getQualityOverview($dateFrom),
-                'patient_feedback_summary' => $this->getPatientFeedbackSummary($dateFrom),
-                'nurse_performance_summary' => $this->getNursePerformanceSummary($dateFrom),
-                'incident_reports_summary' => $this->getIncidentReportsSummary($dateFrom),
-                'quality_metrics_summary' => $this->getQualityMetricsSummary($dateFrom),
+                'overview' => $this->getQualityOverview(),
+                'patient_feedback_summary' => $this->getPatientFeedbackSummary(),
+                'nurse_performance_summary' => $this->getNursePerformanceSummary(),
+                'incident_reports_summary' => $this->getIncidentReportsSummary(),
+                'quality_metrics_summary' => $this->getQualityMetricsSummary(),
             ];
 
             return response()->json([
@@ -52,7 +50,7 @@ class QualityReportingController extends Controller
     public function getPatientFeedback(Request $request): JsonResponse
     {
         try {
-            $query = PatientFeedback::with(['patient', 'nurse', 'carePlan'])
+            $query = PatientFeedback::with(['patient', 'nurse', 'responder']) 
                 ->latest();
 
             // Apply filters
@@ -64,23 +62,15 @@ class QualityReportingController extends Controller
                 $query->where('rating', $request->rating);
             }
 
-            if ($request->has('date_from') && $request->date_from) {
-                $query->whereDate('created_at', '>=', $request->date_from);
-            }
-
-            if ($request->has('date_to') && $request->date_to) {
-                $query->whereDate('created_at', '<=', $request->date_to);
-            }
-
             if ($request->has('search') && $request->search) {
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
                     $q->whereHas('patient', function($subQ) use ($search) {
                         $subQ->where('first_name', 'like', "%{$search}%")
-                             ->orWhere('last_name', 'like', "%{$search}%");
+                            ->orWhere('last_name', 'like', "%{$search}%");
                     })->orWhereHas('nurse', function($subQ) use ($search) {
                         $subQ->where('first_name', 'like', "%{$search}%")
-                             ->orWhere('last_name', 'like', "%{$search}%");
+                            ->orWhere('last_name', 'like', "%{$search}%");
                     })->orWhere('feedback_text', 'like', "%{$search}%");
                 });
             }
@@ -101,7 +91,11 @@ class QualityReportingController extends Controller
                     'care_date' => $item->care_date,
                     'feedback_date' => $item->created_at->format('Y-m-d H:i'),
                     'feedback_category' => $item->feedback_category,
-                    'would_recommend' => $item->would_recommend
+                    'would_recommend' => $item->would_recommend,
+                    'status' => $item->status ?? 'pending',
+                    'response_text' => $item->admin_response ?? $item->response_text,
+                    'responded_at' => $item->response_date ? $item->response_date->format('Y-m-d H:i') : ($item->responded_at ? $item->responded_at->format('Y-m-d H:i') : null),
+                    'responded_by_name' => $item->responder ? $item->responder->first_name . ' ' . $item->responder->last_name : null,
                 ];
             });
 
@@ -125,40 +119,49 @@ class QualityReportingController extends Controller
     public function getNursePerformance(Request $request): JsonResponse
     {
         try {
-            $timeframe = $request->get('timeframe', '30');
-            $dateFrom = Carbon::now()->subDays($timeframe);
+            $perPage = $request->get('per_page', 15);
+            $search = $request->get('search');
+            $gradeFilter = $request->get('grade');
 
-            $nurses = User::where('role', 'nurse')
-                ->where('is_active', true)
-                ->with(['feedback', 'incidentReports'])
-                ->get();
+            // Start with base query
+            $query = User::where('role', 'nurse')
+                ->where('is_active', true);
+            
+            // Apply search filter
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('first_name', 'like', "%{$search}%")
+                      ->orWhere('last_name', 'like', "%{$search}%")
+                      ->orWhere('license_number', 'like', "%{$search}%");
+                });
+            }
 
-            $performanceData = $nurses->map(function ($nurse) use ($dateFrom) {
-                // Calculate performance metrics using CarePlan model directly
+            // Get all matching nurses
+            $nurses = $query->get();
+
+            // Calculate performance metrics for all nurses
+            $performanceData = $nurses->map(function ($nurse) {
                 $activeCarePlans = CarePlan::where(function($query) use ($nurse) {
                     $query->where('primary_nurse_id', $nurse->id)
                           ->orWhere('secondary_nurse_id', $nurse->id);
                 })->where('status', 'active')->count();
                 
                 $totalHours = TimeTracking::where('nurse_id', $nurse->id)
-                    ->where('created_at', '>=', $dateFrom)
                     ->where('status', 'completed')
                     ->sum('total_duration_minutes') / 60 ?? 0;
                 
                 $careSessionsCount = TimeTracking::where('nurse_id', $nurse->id)
-                    ->where('created_at', '>=', $dateFrom)
                     ->where('status', 'completed')
                     ->whereNotNull('patient_id')
                     ->count();
                 
-                $feedback = $nurse->feedback()->where('created_at', '>=', $dateFrom);
+                $feedback = $nurse->feedback();
                 $avgRating = $feedback->avg('rating') ?? 0;
                 $feedbackCount = $feedback->count();
                 
-                $incidents = $nurse->incidentReports()->where('created_at', '>=', $dateFrom)->count();
-                $punctualityScore = $this->calculatePunctualityScore($nurse, $dateFrom);
+                $incidents = $nurse->incidentReports()->count();
+                $punctualityScore = $this->calculatePunctualityScore($nurse);
                 
-                // Calculate overall score
                 $overallScore = $this->calculateOverallScore($avgRating, $punctualityScore, $incidents);
 
                 return [
@@ -180,15 +183,35 @@ class QualityReportingController extends Controller
                 ];
             });
 
-            // Sort by overall score
-            $performanceData = $performanceData->sortByDesc('overall_score')->values();
+            // Apply grade filter if specified
+            if ($gradeFilter && $gradeFilter !== 'all') {
+                $performanceData = $performanceData->filter(function($nurse) use ($gradeFilter) {
+                    return $nurse['performance_grade'] === $gradeFilter;
+                })->values();
+            }
+
+            // Manual pagination
+            $total = $performanceData->count();
+            $currentPage = (int) $request->get('page', 1);
+            $lastPage = (int) ceil($total / $perPage);
+            
+            // Get the slice for current page
+            $offset = ($currentPage - 1) * $perPage;
+            $paginatedData = $performanceData->slice($offset, $perPage)->values();
 
             return response()->json([
                 'success' => true,
-                'data' => $performanceData
+                'data' => $paginatedData->toArray(),
+                'pagination' => [
+                    'current_page' => $currentPage,
+                    'last_page' => $lastPage,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ]
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('Error in getNursePerformance: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch nurse performance data',
@@ -219,18 +242,9 @@ class QualityReportingController extends Controller
                 $query->where('incident_type', $request->incident_type);
             }
 
-            // Filter by nurse name (using staff_family_involved field)
             if ($request->has('nurse_name') && $request->nurse_name) {
                 $query->where('staff_family_role', 'nurse')
                       ->where('staff_family_involved', 'like', "%{$request->nurse_name}%");
-            }
-
-            if ($request->has('date_from') && $request->date_from) {
-                $query->whereDate('incident_date', '>=', $request->date_from);
-            }
-
-            if ($request->has('date_to') && $request->date_to) {
-                $query->whereDate('incident_date', '<=', $request->date_to);
             }
 
             if ($request->has('search') && $request->search) {
@@ -253,7 +267,7 @@ class QualityReportingController extends Controller
             $incidents->getCollection()->transform(function ($incident) {
                 return [
                     'id' => $incident->id,
-                    'title' => substr($incident->incident_description, 0, 60) . '...', // Create title from description
+                    'title' => substr($incident->incident_description, 0, 60) . '...',
                     'description' => $incident->incident_description,
                     'incident_type' => $incident->formatted_incident_type,
                     'incident_location' => $incident->incident_location,
@@ -308,15 +322,12 @@ class QualityReportingController extends Controller
     {
         try {
             $request->validate([
-                // Section 1: General Information
                 'report_date' => 'required|date',
                 'incident_date' => 'required|date|before_or_equal:today',
                 'incident_time' => 'required|date_format:H:i',
                 'incident_location' => 'nullable|string|max:255',
                 'incident_type' => 'required|in:fall,medication_error,equipment_failure,injury,other',
                 'incident_type_other' => 'required_if:incident_type,other|nullable|string|max:255',
-                
-                // Section 2: Person(s) Involved
                 'patient_id' => 'required|exists:users,id',
                 'patient_age' => 'nullable|integer|min:0|max:150',
                 'patient_sex' => 'nullable|in:M,F',
@@ -324,33 +335,22 @@ class QualityReportingController extends Controller
                 'staff_family_involved' => 'nullable|string|max:255',
                 'staff_family_role' => 'nullable|in:nurse,family,other',
                 'staff_family_role_other' => 'required_if:staff_family_role,other|nullable|string|max:255',
-                
-                // Section 3: Description
                 'incident_description' => 'required|string|max:2000',
-                
-                // Section 4: Immediate Actions
                 'first_aid_provided' => 'boolean',
                 'first_aid_description' => 'required_if:first_aid_provided,true|nullable|string|max:1000',
                 'care_provider_name' => 'nullable|string|max:255',
                 'transferred_to_hospital' => 'boolean',
                 'hospital_transfer_details' => 'required_if:transferred_to_hospital,true|nullable|string|max:1000',
-                
-                // Section 5: Witnesses
                 'witness_names' => 'nullable|string|max:1000',
                 'witness_contacts' => 'nullable|string|max:1000',
-                
-                // Section 6: Follow-Up
                 'reported_to_supervisor' => 'nullable|string|max:255',
                 'corrective_preventive_actions' => 'nullable|string|max:1000',
-                
-                // Additional tracking
                 'severity' => 'nullable|in:low,medium,high,critical',
                 'follow_up_required' => 'boolean',
                 'follow_up_date' => 'nullable|date|after:today',
                 'assigned_to' => 'nullable|exists:users,id'
             ]);
 
-            // Validate patient exists and is actually a patient
             $patient = User::where('id', $request->patient_id)
                           ->where('role', 'patient')
                           ->first();
@@ -362,7 +362,6 @@ class QualityReportingController extends Controller
                 ], 422);
             }
             
-            // Validate assigned user if provided
             if ($request->assigned_to) {
                 $assignedUser = User::findOrFail($request->assigned_to);
                 if (!in_array($assignedUser->role, ['nurse', 'doctor', 'admin', 'superadmin'])) {
@@ -373,17 +372,13 @@ class QualityReportingController extends Controller
                 }
             }
 
-            // Prepare incident data
             $incidentData = [
-                // Section 1: General Information
                 'report_date' => $request->report_date,
                 'incident_date' => $request->incident_date,
                 'incident_time' => $request->incident_time,
                 'incident_location' => $request->incident_location,
                 'incident_type' => $request->incident_type,
                 'incident_type_other' => $request->incident_type_other,
-                
-                // Section 2: Person(s) Involved
                 'patient_id' => $request->patient_id,
                 'patient_age' => $request->patient_age ?? $patient->age ?? null,
                 'patient_sex' => $request->patient_sex ?? strtoupper(substr($patient->gender ?? 'M', 0, 1)),
@@ -391,30 +386,18 @@ class QualityReportingController extends Controller
                 'staff_family_involved' => $request->staff_family_involved,
                 'staff_family_role' => $request->staff_family_role,
                 'staff_family_role_other' => $request->staff_family_role_other,
-                
-                // Section 3: Description
                 'incident_description' => $request->incident_description,
-                
-                // Section 4: Immediate Actions
                 'first_aid_provided' => $request->first_aid_provided ?? false,
                 'first_aid_description' => $request->first_aid_description,
                 'care_provider_name' => $request->care_provider_name,
                 'transferred_to_hospital' => $request->transferred_to_hospital ?? false,
                 'hospital_transfer_details' => $request->hospital_transfer_details,
-                
-                // Section 5: Witnesses
                 'witness_names' => $request->witness_names,
                 'witness_contacts' => $request->witness_contacts,
-                
-                // Section 6: Follow-Up
                 'reported_to_supervisor' => $request->reported_to_supervisor,
                 'corrective_preventive_actions' => $request->corrective_preventive_actions,
-                
-                // Section 7: Reporting
                 'reported_by' => auth()->id(),
                 'reported_at' => now(),
-                
-                // Additional tracking
                 'status' => 'pending',
                 'severity' => $request->severity ?? 'medium',
                 'follow_up_required' => $request->follow_up_required ?? false,
@@ -422,14 +405,11 @@ class QualityReportingController extends Controller
                 'assigned_to' => $request->assigned_to,
             ];
 
-            // Create the incident report
             $incident = IncidentReport::create($incidentData);
             
-            // Load fresh incident with relationships for response
             $newIncident = IncidentReport::with(['reporter', 'patient', 'assignedTo'])
                 ->find($incident->id);
             
-            // Prepare response data
             $responseData = [
                 'id' => $newIncident->id,
                 'report_date' => $newIncident->report_date->format('Y-m-d'),
@@ -485,7 +465,6 @@ class QualityReportingController extends Controller
         try {
             $incident = IncidentReport::findOrFail($incidentId);
             
-            // CRITICAL: Check if incident is closed - prevent any edits
             if ($incident->status === 'closed') {
                 return response()->json([
                     'success' => false,
@@ -494,7 +473,6 @@ class QualityReportingController extends Controller
                 ], 422);
             }
             
-            // Check permissions - only allow the reporter, assigned person, or admins to edit
             $user = auth()->user();
             if (!in_array($user->role, ['admin', 'superadmin']) && 
                 $incident->reported_by !== $user->id && 
@@ -506,15 +484,12 @@ class QualityReportingController extends Controller
             }
 
             $request->validate([
-                // Section 1: General Information
                 'report_date' => 'required|date',
                 'incident_date' => 'required|date|before_or_equal:today',
                 'incident_time' => 'required|date_format:H:i',
                 'incident_location' => 'nullable|string|max:255',
                 'incident_type' => 'required|in:fall,medication_error,equipment_failure,injury,other',
                 'incident_type_other' => 'required_if:incident_type,other|nullable|string|max:255',
-                
-                // Section 2: Person(s) Involved
                 'patient_id' => 'required|exists:users,id',
                 'patient_age' => 'nullable|integer|min:0|max:150',
                 'patient_sex' => 'nullable|in:M,F',
@@ -522,33 +497,22 @@ class QualityReportingController extends Controller
                 'staff_family_involved' => 'nullable|string|max:255',
                 'staff_family_role' => 'nullable|in:nurse,family,other',
                 'staff_family_role_other' => 'required_if:staff_family_role,other|nullable|string|max:255',
-                
-                // Section 3: Description
                 'incident_description' => 'required|string|max:2000',
-                
-                // Section 4: Immediate Actions
                 'first_aid_provided' => 'boolean',
                 'first_aid_description' => 'required_if:first_aid_provided,true|nullable|string|max:1000',
                 'care_provider_name' => 'nullable|string|max:255',
                 'transferred_to_hospital' => 'boolean',
                 'hospital_transfer_details' => 'required_if:transferred_to_hospital,true|nullable|string|max:1000',
-                
-                // Section 5: Witnesses
                 'witness_names' => 'nullable|string|max:1000',
                 'witness_contacts' => 'nullable|string|max:1000',
-                
-                // Section 6: Follow-Up
                 'reported_to_supervisor' => 'nullable|string|max:255',
                 'corrective_preventive_actions' => 'nullable|string|max:1000',
-                
-                // Additional tracking
                 'severity' => 'nullable|in:low,medium,high,critical',
                 'follow_up_required' => 'boolean',
                 'follow_up_date' => 'nullable|date|after:today',
                 'assigned_to' => 'nullable|exists:users,id'
             ]);
 
-            // Validate patient exists and is actually a patient
             $patient = User::where('id', $request->patient_id)
                         ->where('role', 'patient')
                         ->first();
@@ -560,17 +524,13 @@ class QualityReportingController extends Controller
                 ], 422);
             }
 
-            // Update incident data
             $updateData = [
-                // Section 1: General Information
                 'report_date' => $request->report_date,
                 'incident_date' => $request->incident_date,
                 'incident_time' => $request->incident_time,
                 'incident_location' => $request->incident_location,
                 'incident_type' => $request->incident_type,
                 'incident_type_other' => $request->incident_type_other,
-                
-                // Section 2: Person(s) Involved
                 'patient_id' => $request->patient_id,
                 'patient_age' => $request->patient_age,
                 'patient_sex' => $request->patient_sex,
@@ -578,39 +538,26 @@ class QualityReportingController extends Controller
                 'staff_family_involved' => $request->staff_family_involved,
                 'staff_family_role' => $request->staff_family_role,
                 'staff_family_role_other' => $request->staff_family_role_other,
-                
-                // Section 3: Description
                 'incident_description' => $request->incident_description,
-                
-                // Section 4: Immediate Actions
                 'first_aid_provided' => $request->first_aid_provided ?? false,
                 'first_aid_description' => $request->first_aid_description,
                 'care_provider_name' => $request->care_provider_name,
                 'transferred_to_hospital' => $request->transferred_to_hospital ?? false,
                 'hospital_transfer_details' => $request->hospital_transfer_details,
-                
-                // Section 5: Witnesses
                 'witness_names' => $request->witness_names,
                 'witness_contacts' => $request->witness_contacts,
-                
-                // Section 6: Follow-Up
                 'reported_to_supervisor' => $request->reported_to_supervisor,
                 'corrective_preventive_actions' => $request->corrective_preventive_actions,
-                
-                // Additional tracking
                 'severity' => $request->severity ?? $incident->severity,
                 'follow_up_required' => $request->follow_up_required ?? false,
                 'follow_up_date' => $request->follow_up_date,
                 'assigned_to' => $request->assigned_to,
-                
-                // Update timestamp and audit info
                 'updated_at' => now(),
                 'last_updated_by' => $user->id
             ];
 
             $incident->update($updateData);
             
-            // Log the update for audit trail
             \Log::info('Incident report updated', [
                 'incident_id' => $incident->id,
                 'updated_by' => $user->id,
@@ -647,7 +594,6 @@ class QualityReportingController extends Controller
         try {
             $incident = IncidentReport::findOrFail($incidentId);
             
-            // CRITICAL: Check if incident is closed - prevent deletion
             if ($incident->status === 'closed') {
                 return response()->json([
                     'success' => false,
@@ -656,7 +602,6 @@ class QualityReportingController extends Controller
                 ], 422);
             }
             
-            // Check permissions - only allow admins and superadmins to delete
             $user = auth()->user();
             if (!in_array($user->role, ['admin', 'superadmin'])) {
                 return response()->json([
@@ -665,7 +610,6 @@ class QualityReportingController extends Controller
                 ], 403);
             }
 
-            // Prevent deletion of resolved incidents unless user is superadmin
             if ($incident->status === 'resolved' && $user->role !== 'superadmin') {
                 return response()->json([
                     'success' => false,
@@ -674,7 +618,6 @@ class QualityReportingController extends Controller
                 ], 422);
             }
 
-            // Log the deletion attempt for audit trail
             \Log::info('Incident report deleted', [
                 'incident_id' => $incident->id,
                 'incident_type' => $incident->incident_type,
@@ -700,7 +643,6 @@ class QualityReportingController extends Controller
         }
     }
 
-
     /**
      * Get single incident report for editing
      */
@@ -710,7 +652,6 @@ class QualityReportingController extends Controller
             $incident = IncidentReport::with(['reporter', 'patient', 'assignedTo'])
                 ->findOrFail($incidentId);
             
-            // Check permissions
             $user = auth()->user();
             if (!in_array($user->role, ['admin', 'superadmin']) && 
                 $incident->reported_by !== $user->id && 
@@ -721,41 +662,27 @@ class QualityReportingController extends Controller
                 ], 403);
             }
 
-            // IMPROVED time formatting function
             $formatTime = function($time) {
                 if (!$time) return null;
                 
                 try {
-                    // Log the original time value for debugging
-                    \Log::info('Original time value: ' . $time . ' (type: ' . gettype($time) . ')');
-                    
-                    // If it's already in HH:MM format, return as-is
                     if (is_string($time) && preg_match('/^\d{1,2}:\d{2}$/', $time)) {
-                        // Ensure it's properly padded
                         $parts = explode(':', $time);
                         $hours = str_pad($parts[0], 2, '0', STR_PAD_LEFT);
                         $minutes = $parts[1];
-                        $formattedTime = $hours . ':' . $minutes;
-                        \Log::info('Formatted time (HH:MM): ' . $formattedTime);
-                        return $formattedTime;
+                        return $hours . ':' . $minutes;
                     }
                     
-                    // If it's in HH:MM:SS format, remove seconds
                     if (is_string($time) && preg_match('/^\d{1,2}:\d{2}:\d{2}$/', $time)) {
                         $timePart = substr($time, 0, 5);
                         $parts = explode(':', $timePart);
                         $hours = str_pad($parts[0], 2, '0', STR_PAD_LEFT);
                         $minutes = $parts[1];
-                        $formattedTime = $hours . ':' . $minutes;
-                        \Log::info('Formatted time (HH:MM:SS -> HH:MM): ' . $formattedTime);
-                        return $formattedTime;
+                        return $hours . ':' . $minutes;
                     }
                     
-                    // Try to parse with Carbon and format
                     $carbon = \Carbon\Carbon::parse($time);
-                    $formattedTime = $carbon->format('H:i');
-                    \Log::info('Formatted time (Carbon): ' . $formattedTime);
-                    return $formattedTime;
+                    return $carbon->format('H:i');
                     
                 } catch (\Exception $e) {
                     \Log::warning("Could not parse time value: " . $time . " - Error: " . $e->getMessage());
@@ -765,16 +692,12 @@ class QualityReportingController extends Controller
 
             $responseData = [
                 'id' => $incident->id,
-                
-                // Section 1: General Information - with safe formatting
                 'report_date' => $incident->report_date ? $incident->report_date->format('Y-m-d') : null,
                 'incident_date' => $incident->incident_date ? $incident->incident_date->format('Y-m-d') : null,
-                'incident_time' => $formatTime($incident->incident_time), // This should now work
+                'incident_time' => $formatTime($incident->incident_time),
                 'incident_location' => $incident->incident_location ?? '',
                 'incident_type' => $incident->incident_type ?? '',
                 'incident_type_other' => $incident->incident_type_other ?? '',
-                
-                // Section 2: Person(s) Involved
                 'patient_id' => $incident->patient_id,
                 'patient_age' => $incident->patient_age ?? null,
                 'patient_sex' => $incident->patient_sex ?? '',
@@ -782,39 +705,24 @@ class QualityReportingController extends Controller
                 'staff_family_involved' => $incident->staff_family_involved ?? '',
                 'staff_family_role' => $incident->staff_family_role ?? '',
                 'staff_family_role_other' => $incident->staff_family_role_other ?? '',
-                
-                // Section 3: Description
                 'incident_description' => $incident->incident_description ?? '',
-                
-                // Section 4: Immediate Actions - with proper boolean casting
                 'first_aid_provided' => (bool)$incident->first_aid_provided,
                 'first_aid_description' => $incident->first_aid_description ?? '',
                 'care_provider_name' => $incident->care_provider_name ?? '',
                 'transferred_to_hospital' => (bool)$incident->transferred_to_hospital,
                 'hospital_transfer_details' => $incident->hospital_transfer_details ?? '',
-                
-                // Section 5: Witness Information
                 'witness_names' => $incident->witness_names ?? '',
                 'witness_contacts' => $incident->witness_contacts ?? '',
-                
-                // Section 6: Follow-Up Actions
                 'reported_to_supervisor' => $incident->reported_to_supervisor ?? '',
                 'corrective_preventive_actions' => $incident->corrective_preventive_actions ?? '',
-                
-                // Additional tracking
                 'severity' => $incident->severity ?? 'medium',
                 'follow_up_required' => (bool)$incident->follow_up_required,
                 'follow_up_date' => $incident->follow_up_date ? $incident->follow_up_date->format('Y-m-d') : null,
                 'assigned_to' => $incident->assigned_to ?? null,
                 'status' => $incident->status ?? 'pending',
-                
-                // Meta information
                 'created_at' => $incident->created_at->format('Y-m-d H:i:s'),
                 'updated_at' => $incident->updated_at->format('Y-m-d H:i:s'),
             ];
-            
-            // Log the final response for debugging
-            \Log::info('Final incident_time in response: ' . ($responseData['incident_time'] ?? 'null'));
             
             return response()->json([
                 'success' => true,
@@ -844,19 +752,16 @@ class QualityReportingController extends Controller
     public function getQualityMetrics(Request $request): JsonResponse
     {
         try {
-            $timeframe = $request->get('timeframe', '30');
-            $dateFrom = Carbon::now()->subDays($timeframe);
-            $dateTo = Carbon::now();
-
             $metrics = [
-                'patient_satisfaction' => $this->getPatientSatisfactionMetrics($dateFrom, $dateTo),
-                'care_quality' => $this->getCareQualityMetrics($dateFrom, $dateTo),
-                'operational_efficiency' => $this->getOperationalEfficiencyMetrics($dateFrom, $dateTo),
-                'safety_metrics' => $this->getSafetyMetrics($dateFrom, $dateTo),
-                'compliance_metrics' => $this->getComplianceMetrics($dateFrom, $dateTo),
-                'trends' => $this->getQualityTrends($dateFrom, $dateTo)
+                'patient_satisfaction' => $this->getPatientSatisfactionMetrics(),
+                'care_quality' => $this->getCareQualityMetrics(),
+                'operational_efficiency' => $this->getOperationalEfficiencyMetrics(),
+                'safety_metrics' => $this->getSafetyMetrics(),
+                'compliance_metrics' => $this->getComplianceMetrics(),
             ];
 
+            \Log::info("Check metrics");
+            \Log::info($metrics);
             return response()->json([
                 'success' => true,
                 'data' => $metrics
@@ -882,13 +787,11 @@ class QualityReportingController extends Controller
                 'actions_taken' => 'nullable|string|max:1000',
                 'follow_up_required' => 'boolean',
                 'follow_up_date' => 'nullable|date|after:today',
-                // 'closure_reason' => 'required_if:status,closed|nullable|string|max:500'
             ]);
 
             $incident = IncidentReport::findOrFail($incidentId);
             $user = auth()->user();
             
-            // CRITICAL: Once closed, status cannot be changed
             if ($incident->status === 'closed') {
                 return response()->json([
                     'success' => false,
@@ -897,7 +800,6 @@ class QualityReportingController extends Controller
                 ], 422);
             }
             
-            // Check permissions
             if (!in_array($user->role, ['admin', 'superadmin']) && 
                 $incident->assigned_to !== $user->id) {
                 return response()->json([
@@ -906,7 +808,6 @@ class QualityReportingController extends Controller
                 ], 403);
             }
 
-            // Business rule: Only admins/superadmins can close incidents
             if ($request->status === 'closed' && !in_array($user->role, ['admin', 'superadmin'])) {
                 return response()->json([
                     'success' => false,
@@ -914,7 +815,6 @@ class QualityReportingController extends Controller
                 ], 403);
             }
 
-            // Business rule: Cannot skip from pending directly to closed
             if ($incident->status === 'pending' && $request->status === 'closed') {
                 return response()->json([
                     'success' => false,
@@ -929,12 +829,10 @@ class QualityReportingController extends Controller
                 'last_updated_by' => $user->id
             ];
 
-            // Add actions taken if provided
             if ($request->actions_taken) {
                 $updateData['corrective_preventive_actions'] = $request->actions_taken;
             }
 
-            // Handle status-specific updates
             switch ($request->status) {
                 case 'under_review':
                 case 'investigated':
@@ -953,14 +851,13 @@ class QualityReportingController extends Controller
                     $updateData['closed_by'] = $user->id;
                     $updateData['closed_at'] = now();
                     $updateData['closure_reason'] = $request->closure_reason;
-                    $updateData['follow_up_required'] = false; // No follow-up needed for closed incidents
+                    $updateData['follow_up_required'] = false;
                     $updateData['follow_up_date'] = null;
                     break;
             }
 
             $incident->update($updateData);
 
-            // Log the status change for audit trail
             \Log::info('Incident status updated', [
                 'incident_id' => $incident->id,
                 'old_status' => $incident->getOriginal('status'),
@@ -989,51 +886,133 @@ class QualityReportingController extends Controller
         }
     }
 
+    /**
+     * Respond to patient feedback
+     */
+    public function respondToFeedback(Request $request, $feedbackId): JsonResponse
+    {
+        try {
+            $request->validate([
+                'response_text' => 'required|string|max:1000'
+            ]);
+
+            $feedback = PatientFeedback::findOrFail($feedbackId);
+            
+            $user = auth()->user();
+            if (!in_array($user->role, ['admin', 'superadmin'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to respond to feedback'
+                ], 403);
+            }
+
+            $feedback->update([
+                'admin_response' => $request->response_text,
+                'response_text' => $request->response_text, 
+                'response_date' => now(),
+                'responded_at' => now(), 
+                'responded_by' => $user->id,
+                'status' => 'responded'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Response sent successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send response',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export reports
+     */
+    public function exportReport($reportType): JsonResponse|Response
+    {
+        try {
+            $user = auth()->user();
+            
+            if (!in_array($user->role, ['admin', 'superadmin'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You do not have permission to export reports'
+                ], 403);
+            }
+
+            switch ($reportType) {
+                case 'patient-feedback':
+                    return $this->exportPatientFeedback();
+                case 'nurse-performance':
+                    return $this->exportNursePerformance();
+                case 'incident-reports':
+                    return $this->exportIncidentReports();
+                case 'quality-metrics':
+                    return $this->exportQualityMetrics();
+                default:
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid report type'
+                    ], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export report',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     // ============================================
     // HELPER METHODS FOR DATA AGGREGATION
     // ============================================
 
-    private function getQualityOverview($dateFrom)
+    private function getQualityOverview()
     {
         return [
-            'total_feedback' => PatientFeedback::where('created_at', '>=', $dateFrom)->count(),
-            'avg_satisfaction' => round(PatientFeedback::where('created_at', '>=', $dateFrom)->avg('rating') ?? 0, 1),
-            'total_incidents' => IncidentReport::where('created_at', '>=', $dateFrom)->count(),
-            'critical_incidents' => IncidentReport::where('created_at', '>=', $dateFrom)->where('severity', 'critical')->count(),
+            'total_feedback' => PatientFeedback::count(),
+            'avg_satisfaction' => round(PatientFeedback::avg('rating') ?? 0, 1),
+            'total_incidents' => IncidentReport::count(),
+            'critical_incidents' => IncidentReport::where('severity', 'critical')->count(),
             'active_nurses' => User::where('role', 'nurse')->where('is_active', true)->count(),
             'active_care_plans' => CarePlan::where('status', 'active')->count(),
             'total_patients' => User::where('role', 'patient')->where('is_active', true)->count(),
-            'care_sessions' => TimeTracking::where('created_at', '>=', $dateFrom)
-                                            ->where('status', 'completed')
+            'care_sessions' => TimeTracking::where('status', 'completed')
                                             ->whereNotNull('patient_id')
                                             ->count(),
         ];
     }
 
-    private function getPatientFeedbackSummary($dateFrom)
+    private function getPatientFeedbackSummary()
     {
-        $totalFeedback = PatientFeedback::where('created_at', '>=', $dateFrom)->count();
-        $avgRating = PatientFeedback::where('created_at', '>=', $dateFrom)->avg('rating') ?? 0;
+        $totalFeedback = PatientFeedback::count();
+        $avgRating = PatientFeedback::avg('rating') ?? 0;
 
         return [
             'total_feedback' => $totalFeedback,
             'avg_rating' => round($avgRating, 1),
-            'feedback_distribution' => $this->getFeedbackDistribution($dateFrom)
+            'feedback_distribution' => $this->getFeedbackDistribution()
         ];
     }
 
-    private function getFeedbackDistribution($dateFrom)
+    private function getFeedbackDistribution()
     {
         return [
-            '5_star' => PatientFeedback::where('created_at', '>=', $dateFrom)->where('rating', 5)->count(),
-            '4_star' => PatientFeedback::where('created_at', '>=', $dateFrom)->where('rating', 4)->count(),
-            '3_star' => PatientFeedback::where('created_at', '>=', $dateFrom)->where('rating', 3)->count(),
-            '2_star' => PatientFeedback::where('created_at', '>=', $dateFrom)->where('rating', 2)->count(),
-            '1_star' => PatientFeedback::where('created_at', '>=', $dateFrom)->where('rating', 1)->count(),
+            '5_star' => PatientFeedback::where('rating', 5)->count(),
+            '4_star' => PatientFeedback::where('rating', 4)->count(),
+            '3_star' => PatientFeedback::where('rating', 3)->count(),
+            '2_star' => PatientFeedback::where('rating', 2)->count(),
+            '1_star' => PatientFeedback::where('rating', 1)->count(),
         ];
     }
 
-    private function getNursePerformanceSummary($dateFrom)
+    private function getNursePerformanceSummary()
     {
         $nurses = User::where('role', 'nurse')->where('is_active', true);
         $totalNurses = $nurses->count();
@@ -1047,34 +1026,28 @@ class QualityReportingController extends Controller
             ];
         }
 
-        // Calculate performance scores
-        $nurseData = $nurses->get()->map(function ($nurse) use ($dateFrom) {
-            // Get assigned care plans directly from CarePlan model
+        $nurseData = $nurses->get()->map(function ($nurse) {
             $activeCarePlans = CarePlan::where(function($query) use ($nurse) {
                 $query->where('primary_nurse_id', $nurse->id)
                       ->orWhere('secondary_nurse_id', $nurse->id);
             })->where('status', 'active')->count();
             
             $totalHours = TimeTracking::where('nurse_id', $nurse->id)
-                ->where('created_at', '>=', $dateFrom)
                 ->where('status', 'completed')
                 ->sum('total_duration_minutes') / 60 ?? 0;
             
-            // FIX: Define $careSessionsCount variable here
             $careSessionsCount = TimeTracking::where('nurse_id', $nurse->id)
-                ->where('created_at', '>=', $dateFrom)
                 ->where('status', 'completed')
                 ->whereNotNull('patient_id')
                 ->count();
             
-            $feedback = $nurse->feedback()->where('created_at', '>=', $dateFrom);
+            $feedback = $nurse->feedback();
             $avgRating = $feedback->avg('rating') ?? 0;
             $feedbackCount = $feedback->count();
             
-            $incidents = $nurse->incidentReports()->where('created_at', '>=', $dateFrom)->count();
-            $punctualityScore = $this->calculatePunctualityScore($nurse, $dateFrom);
+            $incidents = $nurse->incidentReports()->count();
+            $punctualityScore = $this->calculatePunctualityScore($nurse);
             
-            // Calculate overall score
             $overallScore = $this->calculateOverallScore($avgRating, $punctualityScore, $incidents);
 
             return [
@@ -1111,202 +1084,104 @@ class QualityReportingController extends Controller
         ];
     }
 
-    private function getIncidentReportsSummary($dateFrom)
+    private function getIncidentReportsSummary()
     {
-        $incidents = IncidentReport::where('created_at', '>=', $dateFrom);
+        $incidents = IncidentReport::query();
         
         return [
             'total_incidents' => $incidents->count(),
             'critical_incidents' => $incidents->where('severity', 'critical')->count(),
             'pending_incidents' => $incidents->where('status', 'pending')->count(),
-            'avg_resolution_time' => $this->calculateAverageResolutionTime($dateFrom, Carbon::now())
+            'avg_resolution_time' => $this->calculateAverageResolutionTime()
         ];
     }
 
-    private function getQualityMetricsSummary($dateFrom)
+    private function getQualityMetricsSummary()
     {
-        $patientSatisfaction = PatientFeedback::where('created_at', '>=', $dateFrom)->avg('rating') ?? 0;
-        $incidentRate = $this->calculateIncidentRate($dateFrom);
+        $patientSatisfaction = PatientFeedback::avg('rating') ?? 0;
+        $incidentRate = $this->calculateIncidentRate();
         
         return [
             'overall_quality_score' => round(($patientSatisfaction / 5) * 100, 1),
             'patient_satisfaction' => round($patientSatisfaction, 1),
-            'care_compliance' => $this->calculateCareCompliance($dateFrom),
+            'care_compliance' => $this->calculateCareCompliance(),
             'incident_rate' => round($incidentRate, 2),
             'safety_score' => round(max(0, 100 - ($incidentRate * 10)), 1)
         ];
     }
 
-    private function getPatientSatisfactionMetrics($dateFrom, $dateTo)
+    private function getPatientSatisfactionMetrics()
     {
-        $satisfaction = PatientFeedback::whereBetween('created_at', [$dateFrom, $dateTo]);
+        $satisfaction = PatientFeedback::query();
         
         return [
             'average_rating' => round($satisfaction->avg('rating') ?? 0, 1),
             'total_responses' => $satisfaction->count(),
             'rating_distribution' => [
-                '5_star' => $satisfaction->clone()->where('rating', 5)->count(),
-                '4_star' => $satisfaction->clone()->where('rating', 4)->count(),
-                '3_star' => $satisfaction->clone()->where('rating', 3)->count(),
-                '2_star' => $satisfaction->clone()->where('rating', 2)->count(),
-                '1_star' => $satisfaction->clone()->where('rating', 1)->count(),
+                '5_star' => PatientFeedback::where('rating', 5)->count(),
+                '4_star' => PatientFeedback::where('rating', 4)->count(),
+                '3_star' => PatientFeedback::where('rating', 3)->count(),
+                '2_star' => PatientFeedback::where('rating', 2)->count(),
+                '1_star' => PatientFeedback::where('rating', 1)->count(),
             ],
-            'feedback_response_rate' => $this->calculateFeedbackResponseRate($dateFrom, $dateTo),
-            'recommendation_rate' => round($satisfaction->where('would_recommend', true)->count() / max($satisfaction->count(), 1) * 100, 1)
+            'feedback_response_rate' => $this->calculateFeedbackResponseRate(),
+            'recommendation_rate' => round(PatientFeedback::where('would_recommend', true)->count() / max($satisfaction->count(), 1) * 100, 1)
         ];
     }
 
-    private function getCareQualityMetrics($dateFrom, $dateTo)
+    private function getCareQualityMetrics()
     {
         return [
-            'care_plan_completion_rate' => $this->calculateCarePlanCompletionRate($dateFrom, $dateTo),
-            'documentation_completeness' => $this->calculateDocumentationCompleteness($dateFrom, $dateTo),
-            'protocol_adherence' => $this->calculateProtocolAdherence($dateFrom, $dateTo),
-            'care_plan_adherence' => $this->calculateCarePlanAdherence($dateFrom, $dateTo),
-            'vitals_monitoring_consistency' => $this->calculateVitalsMonitoringConsistency($dateFrom, $dateTo),
-            'medication_compliance' => $this->calculateMedicationCompliance($dateFrom, $dateTo),
+            'care_plan_completion_rate' => $this->calculateCarePlanCompletionRate(),
+            'documentation_completeness' => $this->calculateDocumentationCompleteness(),
+            'protocol_adherence' => $this->calculateProtocolAdherence(),
+            'care_plan_adherence' => $this->calculateCarePlanAdherence(),
+            'vitals_monitoring_consistency' => $this->calculateVitalsMonitoringConsistency(),
+            'medication_compliance' => $this->calculateMedicationCompliance(),
         ];
     }
 
-    private function getOperationalEfficiencyMetrics($dateFrom, $dateTo)
+    private function getOperationalEfficiencyMetrics()
     {
         return [
-            'avg_care_hours_per_plan' => $this->calculateAverageHoursPerCarePlan($dateFrom, $dateTo),
-            'schedule_adherence' => $this->calculateScheduleAdherence($dateFrom, $dateTo),
-            'nurse_utilization' => $this->calculateNurseUtilization($dateFrom, $dateTo),
-            'care_plan_efficiency' => $this->calculateCarePlanEfficiency($dateFrom, $dateTo),
+            'avg_care_hours_per_plan' => $this->calculateAverageHoursPerCarePlan(),
+            'schedule_adherence' => $this->calculateScheduleAdherence(),
+            'nurse_utilization' => $this->calculateNurseUtilization(),
+            'care_plan_efficiency' => $this->calculateCarePlanEfficiency(),
         ];
     }
 
-    private function getSafetyMetrics($dateFrom, $dateTo)
+    private function getSafetyMetrics()
     {
-        $totalIncidents = IncidentReport::whereBetween('created_at', [$dateFrom, $dateTo]);
+        $totalIncidents = IncidentReport::query();
         
         return [
             'total_incidents' => $totalIncidents->count(),
             'incidents_by_severity' => [
-                'critical' => $totalIncidents->clone()->where('severity', 'critical')->count(),
-                'high' => $totalIncidents->clone()->where('severity', 'high')->count(),
-                'medium' => $totalIncidents->clone()->where('severity', 'medium')->count(),
-                'low' => $totalIncidents->clone()->where('severity', 'low')->count(),
+                'critical' => IncidentReport::where('severity', 'critical')->count(),
+                'high' => IncidentReport::where('severity', 'high')->count(),
+                'medium' => IncidentReport::where('severity', 'medium')->count(),
+                'low' => IncidentReport::where('severity', 'low')->count(),
             ],
-            'incidents_by_category' => $this->getIncidentsByType($dateFrom, $dateTo),
-            'resolution_time_avg' => $this->calculateAverageResolutionTime($dateFrom, $dateTo),
-            'incident_rate' => $this->calculateIncidentRate($dateFrom),
+            'incidents_by_category' => $this->getIncidentsByType(),
+            'resolution_time_avg' => $this->calculateAverageResolutionTime(),
+            'incident_rate' => $this->calculateIncidentRate(),
         ];
     }
 
-
-    private function calculateMedicationCompliance($dateFrom, $dateTo)
-    {
-        try {
-            // Get assessments with medication information
-            $assessmentsWithMeds = MedicalAssessment::whereBetween('created_at', [$dateFrom, $dateTo])
-                ->whereNotNull('current_medications')
-                ->where('current_medications', '!=', '')
-                ->get();
-
-            if ($assessmentsWithMeds->count() === 0) {
-                return 100; // No medication data to evaluate
-            }
-
-            // For now, assume good compliance if medications are documented
-            // In a real system, you'd track actual medication adherence
-            $patientsWithMedications = $assessmentsWithMeds->count();
-            $totalPatients = MedicalAssessment::whereBetween('created_at', [$dateFrom, $dateTo])
-                ->distinct('patient_id')
-                ->count();
-
-            if ($totalPatients === 0) {
-                return 100;
-            }
-
-            // Calculate compliance as percentage of patients with documented medications
-            $compliance = ($patientsWithMedications / $totalPatients) * 100;
-            return round(min($compliance, 100), 1); // Cap at 100%
-
-        } catch (\Exception $e) {
-            \Log::error('Error calculating medication compliance: ' . $e->getMessage());
-            return 0;
-        }
-    }
-
-    /**
-     * Calculate vitals monitoring consistency based on medical assessments and care sessions
-     */
-    private function calculateVitalsMonitoringConsistency($dateFrom, $dateTo)
-    {
-        try {
-            // Get all medical assessments within the timeframe
-            $assessments = MedicalAssessment::whereBetween('created_at', [$dateFrom, $dateTo])->get();
-            
-            if ($assessments->count() === 0) {
-                return 100; // No assessments to evaluate
-            }
-
-            $completeVitalsCount = 0;
-            $totalAssessments = $assessments->count();
-
-            foreach ($assessments as $assessment) {
-                $vitals = $assessment->initial_vitals ?? [];
-                
-                // Define required vital signs that should be monitored
-                $requiredVitals = ['temperature', 'pulse', 'blood_pressure', 'spo2'];
-                $recordedVitals = 0;
-
-                foreach ($requiredVitals as $vital) {
-                    if (!empty($vitals[$vital]) && $vitals[$vital] !== null && $vitals[$vital] !== '') {
-                        $recordedVitals++;
-                    }
-                }
-
-                // Consider vitals complete if at least 75% of required vitals are recorded
-                $completionThreshold = count($requiredVitals) * 0.75; // 75% threshold
-                if ($recordedVitals >= $completionThreshold) {
-                    $completeVitalsCount++;
-                }
-            }
-
-            $consistency = ($completeVitalsCount / $totalAssessments) * 100;
-            return round($consistency, 1);
-
-        } catch (\Exception $e) {
-            \Log::error('Error calculating vitals monitoring consistency: ' . $e->getMessage());
-            return 0;
-        }
-    }
-
-
-    private function getComplianceMetrics($dateFrom, $dateTo)
+    private function getComplianceMetrics()
     {
         return [
-            'documentation_compliance' => $this->calculateDocumentationCompliance($dateFrom, $dateTo),
-            'care_plan_compliance' => $this->calculateCarePlanCompliance($dateFrom, $dateTo),
-            'training_compliance' => $this->calculateTrainingCompliance($dateFrom, $dateTo),
+            'documentation_compliance' => $this->calculateDocumentationCompliance(),
+            'care_plan_compliance' => $this->calculateCarePlanCompliance(),
+            'training_compliance' => $this->calculateTrainingCompliance(),
             'certification_status' => $this->getCertificationStatus(),
         ];
     }
 
-    private function getQualityTrends($dateFrom, $dateTo)
-    {
-        $days = $dateFrom->diffInDays($dateTo);
-        $interval = $days > 30 ? 'week' : 'day';
-        
-        return [
-            'satisfaction_trend' => $this->getSatisfactionTrend($dateFrom, $dateTo, $interval),
-            'incident_trend' => $this->getIncidentTrend($dateFrom, $dateTo, $interval),
-            'performance_trend' => $this->getPerformanceTrend($dateFrom, $dateTo, $interval),
-        ];
-    }
-
-    // ============================================
-    // CALCULATION HELPER METHODS
-    // ============================================
-
-    private function calculatePunctualityScore($nurse, $dateFrom)
+    private function calculatePunctualityScore($nurse)
     {
         $timeTrackings = TimeTracking::where('nurse_id', $nurse->id)
-            ->where('created_at', '>=', $dateFrom)
             ->with('schedule')
             ->get();
         
@@ -1316,53 +1191,36 @@ class QualityReportingController extends Controller
             if (!$tracking->schedule || !$tracking->start_time) return true;
             
             try {
-                // Get the scheduled date
                 $scheduleDate = Carbon::parse($tracking->schedule->schedule_date)->format('Y-m-d');
-                
-                // Extract just the time component from start_time
                 $startTimeValue = $tracking->schedule->start_time;
                 
-                // Handle different formats of start_time
                 if (strpos($startTimeValue, ' ') !== false) {
-                    // If start_time contains a date part, extract just the time
                     $timeOnly = Carbon::parse($startTimeValue)->format('H:i:s');
                 } else {
-                    // If it's already just time, use as is
                     $timeOnly = $startTimeValue;
                 }
                 
-                // Combine the schedule date with the extracted time
                 $scheduledStart = Carbon::parse($scheduleDate . ' ' . $timeOnly);
                 $actualStart = Carbon::parse($tracking->start_time);
                 
-                // Calculate difference in minutes (negative if early, positive if late)
                 $minutesDifference = $actualStart->diffInMinutes($scheduledStart, false);
                 
-                // Consider on-time if within 15 minutes (early or late)
-                return abs($minutesDifference) <= 15;
+                return abs($minutesDifference) <= 30;
                 
             } catch (\Exception $e) {
-                \Log::error("Error parsing punctuality dates for tracking {$tracking->id}: " . $e->getMessage(), [
-                    'schedule_date' => $tracking->schedule->schedule_date ?? 'null',
-                    'start_time' => $tracking->schedule->start_time ?? 'null',
-                    'actual_start_time' => $tracking->start_time ?? 'null'
-                ]);
-                
-                // If parsing fails, consider it on-time to avoid penalizing
+                \Log::error("Error parsing punctuality dates for tracking {$tracking->id}: " . $e->getMessage());
                 return true;
             }
         })->count();
         
-        $punctualityScore = ($onTimeCount / $timeTrackings->count()) * 100;
-        
-        return $punctualityScore;
+        return ($onTimeCount / $timeTrackings->count()) * 100;
     }
     
     private function calculateOverallScore($avgRating, $punctualityScore, $incidentCount)
     {
-        $ratingScore = ($avgRating / 5) * 40; // 40% weight
-        $punctualityWeight = ($punctualityScore / 100) * 35; // 35% weight
-        $safetyScore = max(0, 25 - ($incidentCount * 5)); // 25% weight, penalize incidents
+        $ratingScore = ($avgRating / 5) * 40;
+        $punctualityWeight = ($punctualityScore / 100) * 35;
+        $safetyScore = max(0, 25 - ($incidentCount * 5));
         
         return $ratingScore + $punctualityWeight + $safetyScore;
     }
@@ -1376,33 +1234,25 @@ class QualityReportingController extends Controller
         return 'F';
     }
 
-    private function calculateFeedbackResponseRate($dateFrom, $dateTo)
+    private function calculateFeedbackResponseRate()
     {
-        // Using care plans instead of care sessions
-        $totalCarePlans = CarePlan::whereBetween('created_at', [$dateFrom, $dateTo])
-                                 ->where('status', 'completed')
-                                 ->count();
-        $feedbackReceived = PatientFeedback::whereBetween('created_at', [$dateFrom, $dateTo])->count();
+        $totalCarePlans = CarePlan::where('status', 'completed')->count();
+        $feedbackReceived = PatientFeedback::count();
         
         return $totalCarePlans > 0 ? round(($feedbackReceived / $totalCarePlans) * 100, 1) : 0;
     }
 
-    private function calculateCarePlanCompletionRate($dateFrom, $dateTo)
+    private function calculateCarePlanCompletionRate()
     {
-        $totalPlans = CarePlan::whereBetween('created_at', [$dateFrom, $dateTo])->count();
-        $completedPlans = CarePlan::whereBetween('updated_at', [$dateFrom, $dateTo])
-                                 ->where('status', 'completed')
-                                 ->count();
+        $totalPlans = CarePlan::count();
+        $completedPlans = CarePlan::where('status', 'completed')->count();
         
         return $totalPlans > 0 ? round(($completedPlans / $totalPlans) * 100, 1) : 0;
     }
 
-    private function calculateCarePlanAdherence($dateFrom, $dateTo)
+    private function calculateCarePlanAdherence()
     {
-        // Calculate based on completion percentage in care plans
-        $carePlans = CarePlan::whereBetween('updated_at', [$dateFrom, $dateTo])
-                            ->where('status', 'active')
-                            ->get();
+        $carePlans = CarePlan::where('status', 'active')->get();
 
         if ($carePlans->count() === 0) return 100;
 
@@ -1410,10 +1260,9 @@ class QualityReportingController extends Controller
         return round($avgCompletion, 1);
     }
 
-    private function calculateDocumentationCompleteness($dateFrom, $dateTo)
+    private function calculateDocumentationCompleteness()
     {
-        // Check if care plans have proper documentation
-        $carePlans = CarePlan::whereBetween('created_at', [$dateFrom, $dateTo])->get();
+        $carePlans = CarePlan::all();
         
         if ($carePlans->count() === 0) return 100;
 
@@ -1426,11 +1275,9 @@ class QualityReportingController extends Controller
         return round(($completeDocumentation / $carePlans->count()) * 100, 1);
     }
 
-    private function calculateAverageHoursPerCarePlan($dateFrom, $dateTo)
+    private function calculateAverageHoursPerCarePlan()
     {
-        // Calculate average hours worked per care plan using TimeTracking
-        $hoursWorked = TimeTracking::whereBetween('created_at', [$dateFrom, $dateTo])
-                              ->where('status', 'completed')
+        $hoursWorked = TimeTracking::where('status', 'completed')
                               ->sum('total_duration_minutes') / 60;
         
         $activeCarePlans = CarePlan::where('status', 'active')->count();
@@ -1438,43 +1285,35 @@ class QualityReportingController extends Controller
         return $activeCarePlans > 0 ? round($hoursWorked / $activeCarePlans, 1) : 0;
     }
 
-    private function calculateScheduleAdherence($dateFrom, $dateTo)
+    private function calculateScheduleAdherence()
     {
-        $timeTrackings = TimeTracking::whereBetween('created_at', [$dateFrom, $dateTo])
-                                    ->with('schedule')
-                                    ->get();
+        $timeTrackings = TimeTracking::with('schedule')->get();
         
         if ($timeTrackings->count() === 0) return 100;
 
-        // Calculate punctuality based on scheduled vs actual start times
         $onTimeCount = $timeTrackings->filter(function($tracking) {
             if (!$tracking->schedule || !$tracking->start_time) return true;
             
             $scheduledStart = Carbon::parse($tracking->schedule->start_time);
             $actualStart = Carbon::parse($tracking->start_time);
             
-            // Consider on-time if within 15 minutes of scheduled time
             return $actualStart->diffInMinutes($scheduledStart, false) <= 15;
         })->count();
         
         return round(($onTimeCount / $timeTrackings->count()) * 100, 1);
     }
 
-    private function calculateNurseUtilization($dateFrom, $dateTo)
+    private function calculateNurseUtilization()
     {
         $totalNurses = User::where('role', 'nurse')->where('is_active', true)->count();
-        $activeNurses = TimeTracking::whereBetween('created_at', [$dateFrom, $dateTo])
-                               ->distinct('nurse_id')
-                               ->count('nurse_id');
+        $activeNurses = TimeTracking::distinct('nurse_id')->count('nurse_id');
         
         return $totalNurses > 0 ? round(($activeNurses / $totalNurses) * 100, 1) : 0;
     }
 
-    private function calculateCarePlanEfficiency($dateFrom, $dateTo)
+    private function calculateCarePlanEfficiency()
     {
-        // Calculate efficiency based on care plan completion time
-        $completedPlans = CarePlan::whereBetween('updated_at', [$dateFrom, $dateTo])
-                                 ->where('status', 'completed')
+        $completedPlans = CarePlan::where('status', 'completed')
                                  ->whereNotNull('start_date')
                                  ->whereNotNull('end_date')
                                  ->get();
@@ -1491,51 +1330,43 @@ class QualityReportingController extends Controller
         return round($avgEfficiency, 1);
     }
 
-    private function calculateIncidentRate($dateFrom)
+    private function calculateIncidentRate()
     {
-        $days = Carbon::now()->diffInDays($dateFrom);
-        $incidents = IncidentReport::where('created_at', '>=', $dateFrom)->count();
+        $incidents = IncidentReport::count();
         $activeCarePlans = CarePlan::where('status', 'active')->count();
         
         return $activeCarePlans > 0 ? ($incidents / $activeCarePlans) : 0;
     }
 
-    private function calculateCareCompliance($dateFrom)
+    private function calculateCareCompliance()
     {
-        // Calculate compliance based on care plan adherence
-        return $this->calculateCarePlanAdherence($dateFrom, Carbon::now());
+        return $this->calculateCarePlanAdherence();
     }
 
-    private function getIncidentsByType($dateFrom, $dateTo)
+    private function getIncidentsByType()
     {
-        return IncidentReport::whereBetween('created_at', [$dateFrom, $dateTo])
-            ->select('incident_type', DB::raw('count(*) as count'))
+        return IncidentReport::select('incident_type', DB::raw('count(*) as count'))
             ->groupBy('incident_type')
             ->pluck('count', 'incident_type')
             ->toArray();
     }
 
-    private function calculateAverageResolutionTime($dateFrom, $dateTo)
+    private function calculateAverageResolutionTime()
     {
-        $resolvedIncidents = IncidentReport::whereBetween('created_at', [$dateFrom, $dateTo])
-            ->whereIn('status', ['resolved', 'closed'])
-            ->get();
+        $resolvedIncidents = IncidentReport::whereIn('status', ['resolved', 'closed'])->get();
 
         if ($resolvedIncidents->count() === 0) return 0;
 
         $totalHours = $resolvedIncidents->sum(function ($incident) {
-           
             return $incident->reported_at->diffInHours($incident->reviewed_at);
         });
 
         return round($totalHours / $resolvedIncidents->count(), 1);
     }
 
-
-    private function calculateDocumentationCompliance($dateFrom, $dateTo)
+    private function calculateDocumentationCompliance()
     {
-        // Check if time tracking sessions have proper documentation
-        $timeTrackings = TimeTracking::whereBetween('created_at', [$dateFrom, $dateTo])->get();
+        $timeTrackings = TimeTracking::all();
         
         if ($timeTrackings->count() === 0) return 100;
 
@@ -1547,20 +1378,18 @@ class QualityReportingController extends Controller
         return round(($properlyDocumented / $timeTrackings->count()) * 100, 1);
     }
 
-    private function calculateProtocolAdherence($dateFrom, $dateTo)
+    private function calculateProtocolAdherence()
     {
-        // Calculate adherence based on care plan completion
-        return $this->calculateCarePlanAdherence($dateFrom, $dateTo);
+        return $this->calculateCarePlanAdherence();
     }
 
-    private function calculateCarePlanCompliance($dateFrom, $dateTo)
+    private function calculateCarePlanCompliance()
     {
-        return $this->calculateCarePlanAdherence($dateFrom, $dateTo);
+        return $this->calculateCarePlanAdherence();
     }
 
-    private function calculateTrainingCompliance($dateFrom, $dateTo)
+    private function calculateTrainingCompliance()
     {
-        // Calculate staff training compliance - placeholder implementation
         $activeNurses = User::where('role', 'nurse')->where('is_active', true)->count();
         $certifiedNurses = User::where('role', 'nurse')
                               ->where('is_active', true)
@@ -1574,7 +1403,10 @@ class QualityReportingController extends Controller
     {
         $nurses = User::where('role', 'nurse')->where('is_active', true);
         $total = $nurses->count();
-        $certified = $nurses->whereNotNull('license_number')->count();
+        $certified = User::where('role', 'nurse')
+                        ->where('is_active', true)
+                        ->whereNotNull('license_number')
+                        ->count();
         
         return [
             'total_nurses' => $total,
@@ -1583,147 +1415,75 @@ class QualityReportingController extends Controller
         ];
     }
 
-    private function getSatisfactionTrend($dateFrom, $dateTo, $interval)
-    {
-        $format = $interval === 'week' ? '%Y-%u' : '%Y-%m-%d';
-        
-        return PatientFeedback::selectRaw("DATE_FORMAT(created_at, '{$format}') as period, AVG(rating) as avg_rating")
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
-            ->groupBy('period')
-            ->orderBy('period')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'period' => $item->period,
-                    'value' => round($item->avg_rating, 1)
-                ];
-            });
-    }
-
-    private function getIncidentTrend($dateFrom, $dateTo, $interval)
-    {
-        $format = $interval === 'week' ? '%Y-%u' : '%Y-%m-%d';
-        
-        return IncidentReport::selectRaw("DATE_FORMAT(created_at, '{$format}') as period, COUNT(*) as incident_count")
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
-            ->groupBy('period')
-            ->orderBy('period')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'period' => $item->period,
-                    'value' => $item->incident_count
-                ];
-            });
-    }
-
-    private function getPerformanceTrend($dateFrom, $dateTo, $interval)
-    {
-        $format = $interval === 'week' ? '%Y-%u' : '%Y-%m-%d';
-        
-        return PatientFeedback::selectRaw("DATE_FORMAT(created_at, '{$format}') as period, AVG(rating) as performance")
-            ->whereBetween('created_at', [$dateFrom, $dateTo])
-            ->groupBy('period')
-            ->orderBy('period')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'period' => $item->period,
-                    'value' => round(($item->performance / 5) * 100, 1)
-                ];
-            });
-    }
-
-
-    /**
-     * Respond to patient feedback
-     */
-    public function respondToFeedback(Request $request, $feedbackId): JsonResponse
+    private function calculateMedicationCompliance()
     {
         try {
-            $request->validate([
-                'response_text' => 'required|string|max:1000'
-            ]);
+            $assessmentsWithMeds = MedicalAssessment::whereNotNull('current_medications')
+                ->where('current_medications', '!=', '')
+                ->get();
 
-            $feedback = PatientFeedback::findOrFail($feedbackId);
-            
-            // Check permissions - only admins/superadmins can respond
-            $user = auth()->user();
-            if (!in_array($user->role, ['admin', 'superadmin'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You do not have permission to respond to feedback'
-                ], 403);
+            if ($assessmentsWithMeds->count() === 0) {
+                return 100;
             }
 
-            $feedback->update([
-                'admin_response' => $request->response_text,
-                'response_date' => now(),
-                'responded_by' => $user->id,
-                'status' => 'responded'
-            ]);
+            $patientsWithMedications = $assessmentsWithMeds->count();
+            $totalPatients = MedicalAssessment::distinct('patient_id')->count();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Response sent successfully'
-            ]);
+            if ($totalPatients === 0) {
+                return 100;
+            }
+
+            $compliance = ($patientsWithMedications / $totalPatients) * 100;
+            return round(min($compliance, 100), 1);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to send response',
-                'error' => $e->getMessage()
-            ], 500);
+            \Log::error('Error calculating medication compliance: ' . $e->getMessage());
+            return 0;
         }
     }
 
-    /**
-     * Export reports
-     */
-    public function exportReport($reportType): JsonResponse
+    private function calculateVitalsMonitoringConsistency()
     {
         try {
-            $user = auth()->user();
+            $assessments = MedicalAssessment::all();
             
-            // Check permissions
-            if (!in_array($user->role, ['admin', 'superadmin'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You do not have permission to export reports'
-                ], 403);
+            if ($assessments->count() === 0) {
+                return 100;
             }
 
-            switch ($reportType) {
-                case 'patient-feedback':
-                    return $this->exportPatientFeedback();
-                case 'nurse-performance':
-                    return $this->exportNursePerformance();
-                case 'incident-reports':
-                    return $this->exportIncidentReports();
-                case 'quality-metrics':
-                    return $this->exportQualityMetrics();
-                default:
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Invalid report type'
-                    ], 400);
+            $completeVitalsCount = 0;
+            $totalAssessments = $assessments->count();
+
+            foreach ($assessments as $assessment) {
+                $vitals = $assessment->initial_vitals ?? [];
+                
+                $requiredVitals = ['temperature', 'pulse', 'blood_pressure', 'spo2'];
+                $recordedVitals = 0;
+
+                foreach ($requiredVitals as $vital) {
+                    if (!empty($vitals[$vital]) && $vitals[$vital] !== null && $vitals[$vital] !== '') {
+                        $recordedVitals++;
+                    }
+                }
+
+                $completionThreshold = count($requiredVitals) * 0.75;
+                if ($recordedVitals >= $completionThreshold) {
+                    $completeVitalsCount++;
+                }
             }
+
+            $consistency = ($completeVitalsCount / $totalAssessments) * 100;
+            return round($consistency, 1);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to export report',
-                'error' => $e->getMessage()
-            ], 500);
+            \Log::error('Error calculating vitals monitoring consistency: ' . $e->getMessage());
+            return 0;
         }
     }
 
-    /**
-     * Export patient feedback as CSV
-     */
-    private function exportPatientFeedback()
+    private function exportPatientFeedback(): Response
     {
-        $feedback = PatientFeedback::with(['patient', 'nurse'])
+        $feedback = PatientFeedback::with(['patient', 'nurse', 'responder'])
             ->latest()
             ->get();
 
@@ -1755,14 +1515,8 @@ class QualityReportingController extends Controller
         return $this->generateCsvResponse($csvData, 'patient_feedback_' . date('Y-m-d') . '.csv');
     }
 
-    /**
-     * Export nurse performance as CSV
-     */
-    private function exportNursePerformance()
+    private function exportNursePerformance(): Response
     {
-        $timeframe = request()->get('timeframe', '30');
-        $dateFrom = Carbon::now()->subDays($timeframe);
-
         $nurses = User::where('role', 'nurse')
             ->where('is_active', true)
             ->get();
@@ -1784,22 +1538,20 @@ class QualityReportingController extends Controller
 
         foreach ($nurses as $nurse) {
             $careSessionsCount = TimeTracking::where('nurse_id', $nurse->id)
-                ->where('created_at', '>=', $dateFrom)
                 ->where('status', 'completed')
                 ->whereNotNull('patient_id')
                 ->count();
             
             $totalHours = TimeTracking::where('nurse_id', $nurse->id)
-                ->where('created_at', '>=', $dateFrom)
                 ->where('status', 'completed')
                 ->sum('total_duration_minutes') / 60 ?? 0;
             
-            $feedback = $nurse->feedback()->where('created_at', '>=', $dateFrom);
+            $feedback = $nurse->feedback();
             $avgRating = $feedback->avg('rating') ?? 0;
             $feedbackCount = $feedback->count();
             
-            $incidents = $nurse->incidentReports()->where('created_at', '>=', $dateFrom)->count();
-            $punctualityScore = $this->calculatePunctualityScore($nurse, $dateFrom);
+            $incidents = $nurse->incidentReports()->count();
+            $punctualityScore = $this->calculatePunctualityScore($nurse);
             $overallScore = $this->calculateOverallScore($avgRating, $punctualityScore, $incidents);
 
             $csvData[] = [
@@ -1820,10 +1572,7 @@ class QualityReportingController extends Controller
         return $this->generateCsvResponse($csvData, 'nurse_performance_' . date('Y-m-d') . '.csv');
     }
 
-    /**
-     * Export incident reports as CSV
-     */
-    private function exportIncidentReports()
+    private function exportIncidentReports(): Response
     {
         $incidents = IncidentReport::with(['reporter', 'patient', 'assignedTo'])
             ->latest()
@@ -1869,39 +1618,28 @@ class QualityReportingController extends Controller
         return $this->generateCsvResponse($csvData, 'incident_reports_' . date('Y-m-d') . '.csv');
     }
 
-    /**
-     * Export quality metrics as CSV
-     */
-    private function exportQualityMetrics()
+    private function exportQualityMetrics(): Response
     {
-        $timeframe = request()->get('timeframe', '30');
-        $dateFrom = Carbon::now()->subDays($timeframe);
-        $dateTo = Carbon::now();
-
         $metrics = [
-            'patient_satisfaction' => $this->getPatientSatisfactionMetrics($dateFrom, $dateTo),
-            'care_quality' => $this->getCareQualityMetrics($dateFrom, $dateTo),
-            'operational_efficiency' => $this->getOperationalEfficiencyMetrics($dateFrom, $dateTo),
-            'safety_metrics' => $this->getSafetyMetrics($dateFrom, $dateTo),
+            'patient_satisfaction' => $this->getPatientSatisfactionMetrics(),
+            'care_quality' => $this->getCareQualityMetrics(),
+            'operational_efficiency' => $this->getOperationalEfficiencyMetrics(),
+            'safety_metrics' => $this->getSafetyMetrics(),
         ];
 
         $csvData = [];
         $csvData[] = ['Metric Category', 'Metric Name', 'Value', 'Unit'];
 
-        // Patient Satisfaction
         $csvData[] = ['Patient Satisfaction', 'Average Rating', $metrics['patient_satisfaction']['average_rating'], '/5'];
         $csvData[] = ['Patient Satisfaction', 'Total Responses', $metrics['patient_satisfaction']['total_responses'], 'count'];
-        $csvData[] = ['Patient Satisfaction', 'Response Rate', $metrics['patient_satisfaction']['response_rate'] ?? 0, '%'];
+        $csvData[] = ['Patient Satisfaction', 'Response Rate', $metrics['patient_satisfaction']['feedback_response_rate'] ?? 0, '%'];
 
-        // Care Quality
         $csvData[] = ['Care Quality', 'Care Plan Completion Rate', $metrics['care_quality']['care_plan_completion_rate'] ?? 0, '%'];
         $csvData[] = ['Care Quality', 'Documentation Completeness', $metrics['care_quality']['documentation_completeness'] ?? 0, '%'];
 
-        // Operational Efficiency
         $csvData[] = ['Operational Efficiency', 'Schedule Adherence', $metrics['operational_efficiency']['schedule_adherence'] ?? 0, '%'];
         $csvData[] = ['Operational Efficiency', 'Nurse Utilization', $metrics['operational_efficiency']['nurse_utilization'] ?? 0, '%'];
 
-        // Safety Metrics
         $csvData[] = ['Safety', 'Total Incidents', $metrics['safety_metrics']['total_incidents'], 'count'];
         $csvData[] = ['Safety', 'Critical Incidents', $metrics['safety_metrics']['incidents_by_severity']['critical'] ?? 0, 'count'];
         $csvData[] = ['Safety', 'Average Resolution Time', $metrics['safety_metrics']['resolution_time_avg'] ?? 0, 'hours'];
@@ -1909,10 +1647,7 @@ class QualityReportingController extends Controller
         return $this->generateCsvResponse($csvData, 'quality_metrics_' . date('Y-m-d') . '.csv');
     }
 
-    /**
-     * Generate CSV response
-     */
-    private function generateCsvResponse($data, $filename)
+    private function generateCsvResponse($data, $filename): Response
     {
         $output = fopen('php://temp', 'r+');
         

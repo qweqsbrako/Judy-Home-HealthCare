@@ -25,6 +25,8 @@ class PatientFeedback extends Model
         'response_text',
         'responded_by',
         'responded_at',
+        'admin_response',
+        'response_date'
     ];
 
     protected $casts = [
@@ -32,6 +34,7 @@ class PatientFeedback extends Model
         'would_recommend' => 'boolean',
         'care_date' => 'date',
         'responded_at' => 'datetime',
+        'response_date' => 'datetime',  
         'created_at' => 'datetime',
         'updated_at' => 'datetime'
     ];
@@ -130,6 +133,11 @@ class PatientFeedback extends Model
     public function scopeHighRatings($query)
     {
         return $query->whereIn('rating', [4, 5]);
+    }
+
+    public function carePlan(): BelongsTo
+    {
+        return $this->belongsTo(CarePlan::class);
     }
 
     /**
@@ -324,11 +332,31 @@ class PatientFeedback extends Model
             }
         });
 
-        // Update status when response is added
+        // Update status when response is added - handle both field sets
         static::updating(function ($feedback) {
-            if (!empty($feedback->response_text) && empty($feedback->responded_at)) {
-                $feedback->responded_at = now();
+            // Sync the duplicate fields
+            if (!empty($feedback->admin_response) && empty($feedback->response_text)) {
+                $feedback->response_text = $feedback->admin_response;
+            }
+            if (!empty($feedback->response_text) && empty($feedback->admin_response)) {
+                $feedback->admin_response = $feedback->response_text;
+            }
+            
+            if (!empty($feedback->response_date) && empty($feedback->responded_at)) {
+                $feedback->responded_at = $feedback->response_date;
+            }
+            if (!empty($feedback->responded_at) && empty($feedback->response_date)) {
+                $feedback->response_date = $feedback->responded_at;
+            }
+            
+            // Update status automatically
+            if ((!empty($feedback->response_text) || !empty($feedback->admin_response)) && $feedback->status !== 'responded') {
                 $feedback->status = 'responded';
+                
+                if (empty($feedback->responded_at) && empty($feedback->response_date)) {
+                    $feedback->responded_at = now();
+                    $feedback->response_date = now();
+                }
             }
         });
     }

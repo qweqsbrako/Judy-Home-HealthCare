@@ -49,7 +49,7 @@
                 />
               </div>
             </div>
-            <div class="form-group">
+            <!-- <div class="form-group">
               <label>Nurse Filter</label>
               <select v-model="filters.nurseId" @change="applyFilters" class="form-control">
                 <option value="">All Nurses</option>
@@ -57,7 +57,7 @@
                   {{ nurse.first_name }} {{ nurse.last_name }}
                 </option>
               </select>
-            </div>
+            </div> -->
           </div>
         </div>
 
@@ -290,107 +290,135 @@
               <div class="table-container" v-if="nurseProductivity.hours_worked">
                 <h4>Nurse Work Hours Summary</h4>
                 <div class="table-scroll">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>Nurse</th>
-                        <th>Total Hours</th>
-                        <th>Sessions</th>
-                        <th>Avg Session</th>
-                        <th>Patient Visits</th>
-                        <th>Unique Patients</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="nurse in mergedNurseData" :key="nurse.nurse_id">
-                        <td>
-                          <div class="nurse-info">
-                            <strong>{{ nurse.nurse.first_name }} {{ nurse.nurse.last_name }}</strong>
-                          </div>
-                        </td>
-                        <td>{{ Math.round(nurse.total_hours) }}h</td>
-                        <td>{{ nurse.total_sessions || 0 }}</td>
-                        <td>{{ nurse.avg_session_hours ? Math.round(nurse.avg_session_hours * 10) / 10 : 0 }}h</td>
-                        <td>{{ nurse.total_visits || 0 }}</td>
-                        <td>{{ nurse.unique_patients || 0 }}</td>
-                      </tr>
-                    </tbody>
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nurse</th>
+                      <th>Total Hours</th>
+                      <th>Actual Hours</th>
+                      <th>Overtime Hours</th>
+                      <th>Sessions</th>
+                      <th>Avg Session</th>
+                      <th>Patient Visits</th>
+                      <th>Unique Patients</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="nurse in mergedNurseData" :key="nurse.nurse_id">
+                      <td>
+                        <div class="nurse-info">
+                          <strong>{{ nurse.nurse.first_name }} {{ nurse.nurse.last_name }}</strong>
+                        </div>
+                      </td>
+                      <td>{{ Math.round(nurse.total_hours) }}h</td>
+                      <td>
+                        <span :class="nurse.actual_hours !== nurse.total_hours ? 'text-info' : ''">
+                          {{ Math.round(nurse.actual_hours) }}h
+                        </span>
+                      </td>
+                      <td>
+                        <span v-if="nurse.overtime_hours > 0" class="badge badge-warning">
+                          {{ Math.round(nurse.overtime_hours) }}h
+                        </span>
+                        <span v-else class="text-muted">0h</span>
+                      </td>
+                      <td>{{ nurse.total_sessions || 0 }}</td>
+                      <td>{{ nurse.avg_session_hours ? Math.round(nurse.avg_session_hours * 10) / 10 : 0 }}h</td>
+                      <td>{{ nurse.total_visits || 0 }}</td>
+                      <td>{{ nurse.unique_patients || 0 }}</td>
+                    </tr>
+                  </tbody>
                   </table>
                 </div>
               </div>
 
               <!-- Hours Worked Chart -->
               <div class="chart-container">
-                <h4>Total Hours Worked by Nurse</h4>
+                <h4>Work Hours Breakdown by Nurse (Scheduled vs Actual) </h4>
                 <canvas ref="nurseHoursChart" width="400" height="300"></canvas>
               </div>
             </div>
 
             <!-- 2. Schedule Compliance Report -->
-            <div class="report-card">
-              <div class="report-header">
-                <h3>Schedule Compliance Report</h3>
-                <button @click="exportReport('schedule_compliance')" class="btn btn-sm btn-secondary">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
-                  </svg>
-                </button>
-              </div>
+              <!-- Schedule Compliance Report -->
+              <div class="report-card">
+                <div class="report-header">
+                  <h3>Schedule Compliance Report</h3>
+                  <button @click="exportReport('schedule_compliance')" class="btn btn-sm btn-secondary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
+                    </svg>
+                  </button>
+                </div>
 
-              <!-- Overall Compliance Stats -->
-              <div class="stats-grid" v-if="scheduleCompliance.confirmations">
-                <div class="stat-card">
-                  <div class="stat-value">{{ scheduleCompliance.confirmations.total_scheduled || 0 }}</div>
-                  <div class="stat-label">Total Scheduled</div>
+                <!-- Overall Compliance Stats -->
+                <div class="stats-grid" v-if="scheduleCompliance.completions">
+                  <div class="stat-card">
+                    <div class="stat-value">{{ scheduleCompliance.completions.total_scheduled || 0 }}</div>
+                    <div class="stat-label">Total Scheduled</div>
+                  </div>
+                  <div class="stat-card success">
+                    <div class="stat-value">{{ scheduleCompliance.completions.completed || 0 }}</div>
+                    <div class="stat-label">Completed</div>
+                  </div>
+                  <div class="stat-card info">
+                    <div class="stat-value">{{ scheduleCompliance.completions.completion_rate || 0 }}%</div>
+                    <div class="stat-label">Completion Rate</div>
+                  </div>
                 </div>
-                <div class="stat-card success">
-                  <div class="stat-value">{{ scheduleCompliance.confirmations.confirmed || 0 }}</div>
-                  <div class="stat-label">Confirmed</div>
-                </div>
-                <div class="stat-card info">
-                  <div class="stat-value">{{ scheduleCompliance.confirmations.confirmation_rate || 0 }}%</div>
-                  <div class="stat-label">Confirmation Rate</div>
-                </div>
-              </div>
 
-              <!-- On-Time Performance -->
-              <div class="table-container" v-if="scheduleCompliance.on_time_rates">
-                <h4>On-Time Performance by Nurse</h4>
-                <div class="table-scroll">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>Nurse</th>
-                        <th>Total Shifts</th>
-                        <th>On-Time</th>
-                        <th>On-Time Rate</th>
-                        <th>No-Shows</th>
-                        <th>Cancellations</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="nurse in mergedComplianceData" :key="nurse.nurse_id">
-                        <td>
-                          <div class="nurse-info">
-                            <strong>{{ nurse.nurse.first_name }} {{ nurse.nurse.last_name }}</strong>
-                          </div>
-                        </td>
-                        <td>{{ nurse.total_shifts || 0 }}</td>
-                        <td>{{ nurse.on_time_shifts || 0 }}</td>
-                        <td>
-                          <div class="progress-bar">
-                            <div class="progress-fill" :style="{ width: (nurse.on_time_rate || 0) + '%' }"></div>
-                            <span class="progress-text">{{ nurse.on_time_rate || 0 }}%</span>
-                          </div>
-                        </td>
-                        <td>{{ nurse.no_show_shifts || 0 }}</td>
-                        <td>{{ nurse.cancelled_shifts || 0 }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <!-- On-Time Performance -->
+                <div class="table-container" v-if="scheduleCompliance.on_time_rates">
+                  <h4>On-Time Performance by Nurse</h4>
+                  <div class="table-scroll">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th>Nurse</th>
+                          <th>Total Shifts</th>
+                          <th>Completed Shifts</th>
+                          <th>On-Time</th>
+                          <th>On-Time Rate</th>
+                          <th>No-Shows</th>
+                          <th>Cancellations</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="nurse in mergedComplianceData" :key="nurse.nurse_id">
+                          <td>
+                            <div class="nurse-info">
+                              <strong>{{ nurse.nurse.first_name }} {{ nurse.nurse.last_name }}</strong>
+                            </div>
+                          </td>
+                          <td>{{ nurse.total_shifts || 0 }}</td>
+                          <td>
+                            <span class="badge badge-success">{{ nurse.completed_shifts || 0 }}</span>
+                          </td>
+                          <td>{{ nurse.on_time_shifts || 0 }}</td>
+                          <td>
+                            <div class="progress-bar">
+                              <div class="progress-fill" :style="{ width: (nurse.on_time_rate || 0) + '%' }"></div>
+                              <span class="progress-text">{{ nurse.on_time_rate || 0 }}%</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span v-if="nurse.no_show_shifts > 0" class="badge badge-danger">
+                              {{ nurse.no_show_shifts }}
+                            </span>
+                            <span v-else class="text-muted">0</span>
+                          </td>
+                          <td>
+                            <span v-if="nurse.cancelled_shifts > 0" class="badge badge-warning">
+                              {{ nurse.cancelled_shifts }}
+                            </span>
+                            <span v-else class="text-muted">0</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
 
             <!-- 3. Time Tracking Analytics -->
             <div class="report-card">
@@ -418,6 +446,7 @@
                       <tr>
                         <th>Nurse</th>
                         <th>Total Hours</th>
+                        <th>Actual Hours</th>
                         <th>Overtime Hours</th>
                         <th>Avg Session</th>
                         <th>Avg Breaks</th>
@@ -431,11 +460,17 @@
                             <strong>{{ nurse.nurse.first_name }} {{ nurse.nurse.last_name }}</strong>
                           </div>
                         </td>
-                        <td>{{ Math.round(nurse.total_hours) }}h</td>
+                        <td>{{ Math.round(nurse.total_hours || 0) }}h</td>
                         <td>
-                          <span :class="nurse.overtime_hours > 0 ? 'badge badge-warning' : 'text-muted'">
-                            {{ Math.round(nurse.overtime_hours) }}h
+                          <span :class="(nurse.actual_hours || 0) !== (nurse.total_hours || 0) ? 'text-info' : ''">
+                            {{ Math.round(nurse.actual_hours || 0) }}h
                           </span>
+                        </td>
+                        <td>
+                          <span v-if="(nurse.overtime_hours || 0) > 0" class="badge badge-warning">
+                            {{ Math.round(nurse.overtime_hours || 0) }}h
+                          </span>
+                          <span v-else class="text-muted">0h</span>
                         </td>
                         <td>{{ nurse.avg_session_hours ? Math.round(nurse.avg_session_hours * 10) / 10 : 0 }}h</td>
                         <td>{{ nurse.avg_breaks_per_shift ? Math.round(nurse.avg_breaks_per_shift * 10) / 10 : 0 }}</td>
@@ -856,27 +891,63 @@ const renderNurseHoursChart = () => {
     type: 'bar',
     data: {
       labels: data.map(item => `${item.nurse.first_name} ${item.nurse.last_name}`),
-      datasets: [{
-        label: 'Total Hours',
-        data: data.map(item => Math.round(item.total_hours)),
-        backgroundColor: '#10b981'
-      }]
+      datasets: [
+        {
+          label: 'Scheduled Hours',
+          data: data.map(item => Math.round(item.total_hours || 0)),
+          backgroundColor: '#3b82f6',
+          borderColor: '#2563eb',
+          borderWidth: 1
+        },
+        {
+          label: 'Actual Hours',
+          data: data.map(item => Math.round(item.actual_hours || 0)),
+          backgroundColor: '#10b981',
+          borderColor: '#059669',
+          borderWidth: 1
+        },
+        {
+          label: 'Overtime Hours',
+          data: data.map(item => Math.round(item.overtime_hours || 0)),
+          backgroundColor: '#f59e0b',
+          borderColor: '#d97706',
+          borderWidth: 1
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: {
-          display: false
+          display: true,
+          position: 'top'
+        },
+        tooltip: {
+          callbacks: {
+            footer: function(tooltipItems) {
+              const dataIndex = tooltipItems[0].dataIndex
+              const nurse = data[dataIndex]
+              const scheduled = Math.round(nurse.total_hours || 0)
+              const actual = Math.round(nurse.actual_hours || 0)
+              const overtime = Math.round(nurse.overtime_hours || 0)
+              return `\nScheduled: ${scheduled}h\nActual: ${actual}h\nOvertime: ${overtime}h`
+            }
+          }
         }
       },
       scales: {
         y: {
-          beginAtZero: true
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Hours'
+          }
         },
         x: {
           ticks: {
-            maxRotation: 45
+            maxRotation: 45,
+            minRotation: 45
           }
         }
       }
@@ -1369,6 +1440,16 @@ onMounted(async () => {
   font-size: 0.75rem;
   font-weight: 500;
   color: #1f2937;
+}
+
+.badge-success {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge-danger {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .form-control {

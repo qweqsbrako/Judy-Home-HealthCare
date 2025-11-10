@@ -59,10 +59,35 @@ export async function getPatientFeedback(filters = {}) {
 
 /**
  * Get nurse performance data
- * @param {number} timeframe - Days to look back (default: 30)
+ * @param {Object} filters - Optional filters (timeframe, grade, search, page, per_page)
  */
-export async function getNursePerformance(timeframe = 30) {
-  return apiGet(`/quality-reports/nurse-performance?timeframe=${timeframe}`);
+export async function getNursePerformance(filters = {}) {
+  const params = new URLSearchParams();
+  
+  // Add pagination parameters
+  if (filters.page) {
+    params.append('page', filters.page);
+  }
+  
+  if (filters.per_page) {
+    params.append('per_page', filters.per_page);
+  }
+  
+  // Add filter parameters
+  if (filters.timeframe) {
+    params.append('timeframe', filters.timeframe);
+  }
+  
+  if (filters.grade && filters.grade !== 'all') {
+    params.append('grade', filters.grade);
+  }
+  
+  if (filters.search) {
+    params.append('search', filters.search);
+  }
+  
+  const queryString = params.toString();
+  return apiGet(`/quality-reports/nurse-performance${queryString ? '?' + queryString : ''}`);
 }
 
 /**

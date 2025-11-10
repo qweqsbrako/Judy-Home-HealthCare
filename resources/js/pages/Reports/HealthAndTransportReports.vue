@@ -49,7 +49,7 @@
                 />
               </div>
             </div>
-            <div class="form-group">
+            <!-- <div class="form-group">
               <label>Patient Filter</label>
               <select v-model="filters.patientId" @change="applyFilters" class="form-control">
                 <option value="">All Patients</option>
@@ -57,7 +57,7 @@
                   {{ patient.first_name }} {{ patient.last_name }}
                 </option>
               </select>
-            </div>
+            </div> -->
           </div>
         </div>
 
@@ -572,7 +572,7 @@ const renderPainLevelsChart = () => {
   painLevelsChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: data.map(t => `Patient #${t.patient_id}`),
+      labels: data.map(t => `${t.patient_name}`),
       datasets: [{
         label: 'Average Pain Level',
         data: data.map(t => Math.round(t.avg_pain_level * 10) / 10),

@@ -488,10 +488,13 @@ Route::middleware('auth:web')->group(function () {
         // FINANCIAL REPORTS
         Route::get('/cost-analysis', [ReportController::class, 'costAnalysisReport'])
             ->name('reports.cost-analysis');
-        Route::get('/service-utilization', [ReportController::class, 'serviceUtilizationReport'])
+        Route::get('/service-utilization-report', [ReportController::class, 'serviceUtilizationReport'])
             ->name('reports.service-utilization');
         Route::get('/revenue-analytics', [ReportController::class, 'revenueAnalytics'])
             ->name('reports.revenue-analytics');
+        Route::get('/financial/export', [ReportController::class, 'exportFinancialReports']);
+        Route::get('/payment-statistics-report', [ReportController::class, 'paymentStatisticsReport']);
+
         
         // EXPORT FUNCTIONALITY
         Route::get('/export', [ReportController::class, 'exportReport'])

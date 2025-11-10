@@ -5,8 +5,8 @@
         <!-- Page Header -->
         <div class="page-header">
           <div class="page-header-content">
-            <h1>Financial & Billing Reports</h1>
-            <p>Cost analysis, service utilization, and revenue analytics</p>
+            <h1>Financial Reports</h1>
+            <p>Revenue analytics and payment statistics</p>
           </div>
           <div class="page-header-actions">
             <button @click="exportAllReports" class="btn btn-secondary">
@@ -73,66 +73,49 @@
             </div>
             <div class="summary-content">
               <div class="summary-label">Total Revenue</div>
-              <div class="summary-value">${{ formatCurrency(getTotalRevenue()) }}</div>
-              <div class="summary-change positive">
+              <div class="summary-value">{{ formatCurrency(getTotalRevenue()) }}</div>
+              <div :class="['summary-change', getRevenueChangeClass()]">
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
+                  <path v-if="getRevenueChange() >= 0" fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
+                  <path v-else fill-rule="evenodd" d="M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z" clip-rule="evenodd" />
                 </svg>
-                <span>+12.5% from last period</span>
+                <span>{{ Math.abs(getRevenueChange()) }}% vs last period</span>
               </div>
             </div>
           </div>
 
-          <div class="summary-card costs">
-            <div class="summary-icon">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div class="summary-content">
-              <div class="summary-label">Total Costs</div>
-              <div class="summary-value">${{ formatCurrency(getTotalCosts()) }}</div>
-              <div class="summary-change negative">
-                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z" clip-rule="evenodd" />
-                </svg>
-                <span>+8.3% from last period</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="summary-card profit">
-            <div class="summary-icon">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div class="summary-content">
-              <div class="summary-label">Net Profit</div>
-              <div class="summary-value">${{ formatCurrency(getNetProfit()) }}</div>
-              <div class="summary-change positive">
-                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
-                </svg>
-                <span>+18.2% from last period</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="summary-card transactions">
+          <div class="summary-card payments">
             <div class="summary-icon">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
             </div>
             <div class="summary-content">
-              <div class="summary-label">Transactions</div>
-              <div class="summary-value">{{ getTotalTransactions() }}</div>
+              <div class="summary-label">Payment Success Rate</div>
+              <div class="summary-value">{{ getPaymentSuccessRate() }}%</div>
               <div class="summary-change positive">
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd" />
                 </svg>
-                <span>+15.8% from last period</span>
+                <span>Completion rate</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-card average">
+            <div class="summary-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div class="summary-content">
+              <div class="summary-label">Avg Transaction Value</div>
+              <div class="summary-value">{{ formatCurrency(getAvgTransactionValue()) }}</div>
+              <div class="summary-change neutral">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                </svg>
+                <span>Per transaction</span>
               </div>
             </div>
           </div>
@@ -141,102 +124,72 @@
         <!-- Reports Grid -->
         <div class="reports-grid">
           
-          <!-- 1. Cost Analysis Report -->
+          <!-- 1. Payment Statistics Report -->
           <div class="report-card">
             <div class="report-header">
-              <h3>Cost Analysis Report</h3>
-              <button @click="exportReport('cost_analysis')" class="btn btn-sm btn-secondary">
+              <h3>Payment Statistics</h3>
+              <button @click="exportReport('payment_statistics')" class="btn btn-sm btn-secondary">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
                 </svg>
               </button>
             </div>
 
-            <!-- Cost Breakdown Chart -->
+            <!-- Payment Trends Chart -->
             <div class="chart-container">
-              <h4>Cost Breakdown by Category</h4>
-              <canvas ref="costBreakdownChart" width="400" height="300"></canvas>
+              <h4>Payment Trends Over Time</h4>
+              <canvas ref="paymentTrendsChart" width="400" height="250"></canvas>
             </div>
 
-            <!-- Care Delivery Costs -->
-            <div class="table-container" v-if="costAnalysis.care_delivery_costs">
-              <h4>Care Delivery Costs by Nurse</h4>
-              <div class="table-scroll">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Nurse</th>
-                      <th>Total Hours</th>
-                      <th>Estimated Cost</th>
-                      <th>Avg Cost/Hour</th>
-                      <th>Cost Trend</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="nurse in costAnalysis.care_delivery_costs" :key="nurse.nurse_id">
-                      <td>
-                        <div class="nurse-info">
-                          <strong>{{ nurse.nurse.first_name }} {{ nurse.nurse.last_name }}</strong>
-                        </div>
-                      </td>
-                      <td>{{ Math.round(nurse.total_hours) }}h</td>
-                      <td class="cost-value">${{ formatCurrency(nurse.estimated_cost_usd) }}</td>
-                      <td>${{ formatCurrency(25) }}</td>
-                      <td>
-                        <span class="badge badge-info">Standard</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+            <!-- Payment Method Breakdown -->
+            <div class="chart-container">
+              <h4>Payment Method Distribution</h4>
+              <canvas ref="paymentMethodChart" width="400" height="300"></canvas>
+            </div>
+
+            <!-- Payment Statistics Grid -->
+            <div class="stats-grid" v-if="paymentStatistics.total_payments">
+              <div class="stat-card">
+                <div class="stat-value">{{ paymentStatistics.total_payments || 0 }}</div>
+                <div class="stat-label">Total Payments</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ paymentStatistics.completed_payments || 0 }}</div>
+                <div class="stat-label">Completed</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ paymentStatistics.pending_payments || 0 }}</div>
+                <div class="stat-label">Pending</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ paymentStatistics.failed_payments || 0 }}</div>
+                <div class="stat-label">Failed</div>
               </div>
             </div>
 
-            <!-- Transportation Costs -->
-            <div class="table-container" v-if="costAnalysis.transport_costs">
-              <h4>Transportation Cost Summary</h4>
-              <div class="cost-summary-grid">
-                <div class="cost-summary-item">
-                  <div class="cost-label">Total Transport Cost</div>
-                  <div class="cost-amount">${{ formatCurrency(costAnalysis.transport_costs.total_transport_cost) }}</div>
-                </div>
-                <div class="cost-summary-item">
-                  <div class="cost-label">Average Cost per Trip</div>
-                  <div class="cost-amount">${{ formatCurrency(costAnalysis.transport_costs.avg_cost_per_trip) }}</div>
-                </div>
-                <div class="cost-summary-item">
-                  <div class="cost-label">Total Distance</div>
-                  <div class="cost-amount">{{ costAnalysis.transport_costs.total_distance }} km</div>
-                </div>
-                <div class="cost-summary-item">
-                  <div class="cost-label">Total Trips</div>
-                  <div class="cost-amount">{{ costAnalysis.transport_costs.total_trips }}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Resource Utilization -->
-            <div class="table-container" v-if="costAnalysis.resource_utilization">
-              <h4>Resource Utilization by Care Type</h4>
+            <!-- Payment Type Breakdown -->
+            <div class="table-container" v-if="paymentStatistics.payment_type_breakdown && paymentStatistics.payment_type_breakdown.length > 0">
+              <h4>Revenue by Payment Type</h4>
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Care Type</th>
-                    <th>Total Plans</th>
-                    <th>Avg Duration (Days)</th>
-                    <th>Utilization Rate</th>
+                    <th>Payment Type</th>
+                    <th>Count</th>
+                    <th>Total Revenue</th>
+                    <th>Percentage</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="resource in costAnalysis.resource_utilization" :key="resource.care_type">
+                  <tr v-for="type in paymentStatistics.payment_type_breakdown" :key="type.payment_type">
                     <td>
-                      <span class="care-type-badge">{{ formatCareType(resource.care_type) }}</span>
+                      <span class="type-badge">{{ formatPaymentType(type.payment_type) }}</span>
                     </td>
-                    <td>{{ resource.total_plans }}</td>
-                    <td>{{ Math.round(resource.avg_duration_days) }} days</td>
+                    <td>{{ type.count }}</td>
+                    <td class="revenue-value">{{ formatCurrency(type.total_revenue) }}</td>
                     <td>
                       <div class="progress-bar">
-                        <div class="progress-fill" :style="{ width: calculateUtilization(resource.total_plans) + '%' }"></div>
-                        <span class="progress-text">{{ calculateUtilization(resource.total_plans) }}%</span>
+                        <div class="progress-fill" :style="{ width: calculatePercentage(type.total_revenue) + '%' }"></div>
+                        <span class="progress-text">{{ calculatePercentage(type.total_revenue) }}%</span>
                       </div>
                     </td>
                   </tr>
@@ -248,7 +201,7 @@
           <!-- 2. Service Utilization Report -->
           <div class="report-card">
             <div class="report-header">
-              <h3>Service Utilization Report</h3>
+              <h3>Service Utilization</h3>
               <button @click="exportReport('service_utilization')" class="btn btn-sm btn-secondary">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3" />
@@ -262,14 +215,8 @@
               <canvas ref="servicesChart" width="400" height="300"></canvas>
             </div>
 
-            <!-- Peak Usage Times -->
-            <div class="chart-container">
-              <h4>Peak Usage Times (By Hour)</h4>
-              <canvas ref="peakTimesChart" width="400" height="250"></canvas>
-            </div>
-
             <!-- Service Duration Analysis -->
-            <div class="table-container" v-if="serviceUtilization.service_duration">
+            <div class="table-container" v-if="serviceUtilization.service_duration && serviceUtilization.service_duration.length > 0">
               <h4>Service Duration Analysis</h4>
               <table class="data-table">
                 <thead>
@@ -278,43 +225,37 @@
                     <th>Session Count</th>
                     <th>Total Hours</th>
                     <th>Avg Duration</th>
-                    <th>Efficiency</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="service in serviceUtilization.service_duration" :key="service.session_type">
+                  <tr v-for="duration in serviceUtilization.service_duration" :key="duration.session_type">
                     <td>
-                      <span class="service-badge">{{ formatSessionType(service.session_type) }}</span>
+                      <span class="session-badge">{{ formatSessionType(duration.session_type) }}</span>
                     </td>
-                    <td>{{ service.session_count }}</td>
-                    <td>{{ Math.round(service.total_hours) }}h</td>
-                    <td>{{ Math.round(service.avg_duration_hours * 10) / 10 }}h</td>
-                    <td>
-                      <span :class="getEfficiencyBadge(service.avg_duration_hours)">
-                        {{ getEfficiencyStatus(service.avg_duration_hours) }}
-                      </span>
-                    </td>
+                    <td>{{ duration.session_count }}</td>
+                    <td>{{ Math.round(parseFloat(duration.total_hours || 0)) }} hrs</td>
+                    <td>{{ parseFloat(duration.avg_duration_hours || 0).toFixed(1) }} hrs</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
             <!-- Geographic Utilization -->
-            <div class="table-container" v-if="serviceUtilization.geographic_utilization">
+            <div class="table-container" v-if="serviceUtilization.geographic_utilization && serviceUtilization.geographic_utilization.length > 0">
               <h4>Top Service Locations</h4>
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>Location</th>
                     <th>Request Count</th>
-                    <th>Percentage</th>
+                    <th>Share</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="location in serviceUtilization.geographic_utilization" :key="location.pickup_location">
                     <td>
                       <div class="location-info">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
@@ -324,17 +265,23 @@
                     <td>{{ location.request_count }}</td>
                     <td>
                       <div class="progress-bar">
-                        <div class="progress-fill" :style="{ width: calculateLocationPercentage(location.request_count) + '%' }"></div>
-                        <span class="progress-text">{{ calculateLocationPercentage(location.request_count) }}%</span>
+                        <div class="progress-fill" :style="{ width: calculateLocationShare(location.request_count) + '%' }"></div>
+                        <span class="progress-text">{{ calculateLocationShare(location.request_count) }}%</span>
                       </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
+
+            <!-- Peak Usage Times -->
+            <div class="chart-container" v-if="serviceUtilization.peak_usage_times && serviceUtilization.peak_usage_times.length > 0">
+              <h4>Peak Usage Times</h4>
+              <canvas ref="peakTimesChart" width="400" height="250"></canvas>
+            </div>
           </div>
 
-          <!-- 3. Revenue Analytics -->
+          <!-- 3. Revenue Analytics Report -->
           <div class="report-card">
             <div class="report-header">
               <h3>Revenue Analytics</h3>
@@ -347,105 +294,119 @@
 
             <!-- Revenue Trends Chart -->
             <div class="chart-container">
-              <h4>Revenue Trends Over Time</h4>
-              <canvas ref="revenueTrendsChart" width="400" height="250"></canvas>
+              <h4>Revenue Trends by Payment Type</h4>
+              <canvas ref="revenueTrendsChart" width="400" height="300"></canvas>
+            </div>
+
+            <!-- Monthly Comparison -->
+            <div class="comparison-card" v-if="revenueAnalytics.monthly_comparison">
+              <h4>Monthly Comparison</h4>
+              <div class="comparison-content">
+                <div class="comparison-item">
+                  <div class="comparison-label">This Month</div>
+                  <div class="comparison-value current">{{ formatCurrency(revenueAnalytics.monthly_comparison.this_month) }}</div>
+                </div>
+                <div class="comparison-arrow">
+                  <svg v-if="revenueAnalytics.monthly_comparison.change_percentage >= 0" class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  <svg v-else class="w-8 h-8 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                  </svg>
+                  <span :class="revenueAnalytics.monthly_comparison.change_percentage >= 0 ? 'text-success' : 'text-danger'">
+                    {{ Math.abs(revenueAnalytics.monthly_comparison.change_percentage) }}%
+                  </span>
+                </div>
+                <div class="comparison-item">
+                  <div class="comparison-label">Last Month</div>
+                  <div class="comparison-value previous">{{ formatCurrency(revenueAnalytics.monthly_comparison.last_month) }}</div>
+                </div>
+              </div>
             </div>
 
             <!-- Payment Metrics -->
-            <div class="stats-grid" v-if="revenueAnalytics.payment_metrics">
-              <div class="stat-card">
-                <div class="stat-value">${{ formatCurrency(revenueAnalytics.payment_metrics.total_processed) }}</div>
-                <div class="stat-label">Total Processed</div>
+            <div class="metrics-grid" v-if="revenueAnalytics.payment_metrics">
+              <div class="metric-card">
+                <div class="metric-icon">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Total Processed</div>
+                  <div class="metric-value">{{ formatCurrency(revenueAnalytics.payment_metrics.total_processed) }}</div>
+                </div>
               </div>
-              <div class="stat-card">
-                <div class="stat-value">${{ formatCurrency(revenueAnalytics.payment_metrics.avg_transaction_value) }}</div>
-                <div class="stat-label">Avg Transaction</div>
+              <div class="metric-card">
+                <div class="metric-icon">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Avg Transaction</div>
+                  <div class="metric-value">{{ formatCurrency(revenueAnalytics.payment_metrics.avg_transaction_value) }}</div>
+                </div>
               </div>
-              <div class="stat-card">
-                <div class="stat-value">{{ revenueAnalytics.payment_metrics.transaction_count }}</div>
-                <div class="stat-label">Transactions</div>
+              <div class="metric-card">
+                <div class="metric-icon">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Transactions</div>
+                  <div class="metric-value">{{ revenueAnalytics.payment_metrics.transaction_count }}</div>
+                </div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-icon">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
+                  </svg>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Tax Collected</div>
+                  <div class="metric-value">{{ formatCurrency(revenueAnalytics.payment_metrics.total_tax_collected) }}</div>
+                </div>
               </div>
             </div>
 
-            <!-- Service Revenue Breakdown -->
-            <div class="chart-container">
-              <h4>Revenue by Service Type</h4>
-              <canvas ref="serviceRevenueChart" width="400" height="300"></canvas>
-            </div>
-
-            <!-- Outstanding Balances -->
-            <div class="table-container" v-if="revenueAnalytics.outstanding_balances && revenueAnalytics.outstanding_balances.length > 0">
-              <h4>Outstanding Balances (Top 10)</h4>
+            <!-- Top Paying Patients -->
+            <div class="table-container" v-if="revenueAnalytics.top_paying_patients && revenueAnalytics.top_paying_patients.length > 0">
+              <h4>Top Paying Patients</h4>
               <div class="table-scroll">
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th>Patient ID</th>
-                      <th>Estimated Amount Due</th>
-                      <th>Status</th>
-                      <th>Action</th>
+                      <th>Patient</th>
+                      <th>Email</th>
+                      <th>Total Paid</th>
+                      <th>Payments</th>
+                      <th>Avg Payment</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="balance in revenueAnalytics.outstanding_balances.slice(0, 10)" :key="balance.patient_id">
-                      <td>#{{ balance.patient_id }}</td>
-                      <td class="cost-value">${{ formatCurrency(balance.estimated_amount_due) }}</td>
+                    <tr v-for="patient in revenueAnalytics.top_paying_patients" :key="patient.patient_id">
                       <td>
-                        <span :class="getBalanceStatusBadge(balance.estimated_amount_due)">
-                          {{ getBalanceStatus(balance.estimated_amount_due) }}
-                        </span>
+                        <div class="patient-info">
+                          <strong>{{ patient.first_name }} {{ patient.last_name }}</strong>
+                        </div>
                       </td>
-                      <td>
-                        <button @click="sendPaymentReminder(balance.patient_id)" class="btn btn-sm btn-secondary">
-                          Send Reminder
-                        </button>
-                      </td>
+                      <td>{{ patient.email }}</td>
+                      <td class="revenue-value">{{ formatCurrency(patient.total_paid) }}</td>
+                      <td>{{ patient.payment_count }}</td>
+                      <td>{{ formatCurrency(parseFloat(patient.total_paid) / patient.payment_count) }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
 
-            <!-- Revenue Performance Indicators -->
-            <div class="performance-indicators">
-              <div class="indicator-card">
-                <div class="indicator-icon revenue-icon">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                  </svg>
-                </div>
-                <div class="indicator-content">
-                  <div class="indicator-label">Revenue Growth Rate</div>
-                  <div class="indicator-value positive">+12.5%</div>
-                  <div class="indicator-description">Compared to previous period</div>
-                </div>
-              </div>
-
-              <div class="indicator-card">
-                <div class="indicator-icon collection-icon">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div class="indicator-content">
-                  <div class="indicator-label">Collection Rate</div>
-                  <div class="indicator-value">92.3%</div>
-                  <div class="indicator-description">Of total receivables</div>
-                </div>
-              </div>
-
-              <div class="indicator-card">
-                <div class="indicator-icon profit-icon">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div class="indicator-content">
-                  <div class="indicator-label">Profit Margin</div>
-                  <div class="indicator-value positive">28.7%</div>
-                  <div class="indicator-description">Net profit percentage</div>
-                </div>
-              </div>
+            <!-- Revenue by Care Type -->
+            <div class="chart-container" v-if="revenueAnalytics.revenue_by_care_type && revenueAnalytics.revenue_by_care_type.length > 0">
+              <h4>Revenue by Care Type</h4>
+              <canvas ref="revenueByCareTypeChart" width="400" height="300"></canvas>
             </div>
           </div>
 
@@ -459,10 +420,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, inject } from 'vue'
+import { ref, onMounted, nextTick, inject } from 'vue'
 import MainLayout from '../../layout/MainLayout.vue'
 import Toast from '../../common/components/Toast.vue'
 import Chart from 'chart.js/auto'
+import {
+  getPaymentStatistics,
+  getServiceUtilization,
+  getRevenueAnalytics,
+  exportFinancialReport,
+  exportAllFinancialReports
+} from '../../services/financeReportsService'
 
 const toast = inject('toast')
 
@@ -470,7 +438,7 @@ const toast = inject('toast')
 const loading = ref(false)
 
 // Report data
-const costAnalysis = ref({})
+const paymentStatistics = ref({})
 const serviceUtilization = ref({})
 const revenueAnalytics = ref({})
 
@@ -482,103 +450,87 @@ const filters = ref({
 })
 
 // Chart references
-const costBreakdownChart = ref(null)
+const paymentTrendsChart = ref(null)
+const paymentMethodChart = ref(null)
 const servicesChart = ref(null)
 const peakTimesChart = ref(null)
 const revenueTrendsChart = ref(null)
-const serviceRevenueChart = ref(null)
+const revenueByCareTypeChart = ref(null)
 
 // Chart instances
-let costBreakdownChartInstance = null
+let paymentTrendsChartInstance = null
+let paymentMethodChartInstance = null
 let servicesChartInstance = null
 let peakTimesChartInstance = null
 let revenueTrendsChartInstance = null
-let serviceRevenueChartInstance = null
+let revenueByCareTypeChartInstance = null
 
-// Computed properties for summary cards
+// Computed values for summary cards
 const getTotalRevenue = () => {
-  let total = 0
-  
-  if (revenueAnalytics.value.payment_metrics) {
-    total += revenueAnalytics.value.payment_metrics.total_processed || 0
-  }
-  
-  if (revenueAnalytics.value.service_revenue) {
-    const serviceTotal = revenueAnalytics.value.service_revenue.reduce((sum, item) => 
-      sum + (parseFloat(item.estimated_revenue) || 0), 0
-    )
-    total += serviceTotal
-  }
-  
-  return total
+  return parseFloat(paymentStatistics.value.total_revenue || 0)
 }
 
-const getTotalCosts = () => {
-  let total = 0
-  
-  if (costAnalysis.value.care_delivery_costs) {
-    total += costAnalysis.value.care_delivery_costs.reduce((sum, item) => 
-      sum + (parseFloat(item.estimated_cost_usd) || 0), 0
-    )
-  }
-  
-  if (costAnalysis.value.transport_costs) {
-    total += parseFloat(costAnalysis.value.transport_costs.total_transport_cost) || 0
-  }
-  
-  return total
+const getRevenueChange = () => {
+  return parseFloat(paymentStatistics.value.revenue_change_percentage || 0)
 }
 
-const getNetProfit = () => {
-  return getTotalRevenue() - getTotalCosts()
+const getRevenueChangeClass = () => {
+  const change = getRevenueChange()
+  if (change > 0) return 'positive'
+  if (change < 0) return 'negative'
+  return 'neutral'
 }
 
-const getTotalTransactions = () => {
-  return revenueAnalytics.value.payment_metrics?.transaction_count || 0
+const getPaymentSuccessRate = () => {
+  return parseFloat(paymentStatistics.value.completion_rate || 0)
+}
+
+const getAvgTransactionValue = () => {
+  return parseFloat(paymentStatistics.value.average_payment_amount || 0)
 }
 
 // Methods
-const loadCostAnalysis = async () => {
+const loadPaymentStatistics = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
-    const response = await fetch(`/api/reports/cost-analysis?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      costAnalysis.value = await response.json()
+    const data = await getPaymentStatistics(filterParams)
+    if (data) {
+      paymentStatistics.value = data
+      
+      // Debug logs
+      console.log('Payment Statistics Data:', data)
+      console.log('Payment Trends:', data.payment_trends)
+      console.log('Payment Method Breakdown:', data.payment_method_breakdown)
+      
       await nextTick()
-      renderCostBreakdownChart()
+      renderPaymentTrendsChart()
+      renderPaymentMethodChart()
     }
   } catch (error) {
-    console.error('Error loading cost analysis:', error)
-    toast.showError('Failed to load cost analysis')
+    console.error('Error loading payment statistics:', error)
+    toast.showError('Failed to load payment statistics')
   }
 }
 
 const loadServiceUtilization = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
-    const response = await fetch(`/api/reports/service-utilization?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      serviceUtilization.value = await response.json()
+    const data = await getServiceUtilization(filterParams)
+    if (data) {
+      serviceUtilization.value = data
+      
+      // Debug logs
+      console.log('Service Utilization Data:', data)
+      console.log('Most Requested Services:', data.most_requested_services)
+      
       await nextTick()
       renderServicesChart()
       renderPeakTimesChart()
@@ -591,23 +543,17 @@ const loadServiceUtilization = async () => {
 
 const loadRevenueAnalytics = async () => {
   try {
-    const params = new URLSearchParams({
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
+    }
     
-    const response = await fetch(`/api/reports/revenue-analytics?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (response.ok) {
-      revenueAnalytics.value = await response.json()
+    const data = await getRevenueAnalytics(filterParams)
+    if (data) {
+      revenueAnalytics.value = data
       await nextTick()
       renderRevenueTrendsChart()
-      renderServiceRevenueChart()
+      renderRevenueByCareTypeChart()
     }
   } catch (error) {
     console.error('Error loading revenue analytics:', error)
@@ -616,28 +562,119 @@ const loadRevenueAnalytics = async () => {
 }
 
 // Chart rendering methods
-const renderCostBreakdownChart = () => {
-  if (!costBreakdownChart.value) return
+const renderPaymentTrendsChart = () => {
+  if (!paymentTrendsChart.value) return
   
-  if (costBreakdownChartInstance) {
-    costBreakdownChartInstance.destroy()
+  if (paymentTrendsChartInstance) {
+    paymentTrendsChartInstance.destroy()
   }
   
-  const ctx = costBreakdownChart.value.getContext('2d')
+  const ctx = paymentTrendsChart.value.getContext('2d')
+  const data = paymentStatistics.value.payment_trends || []
   
-  const careDeliveryCost = costAnalysis.value.care_delivery_costs?.reduce((sum, item) => 
-    sum + (parseFloat(item.estimated_cost_usd) || 0), 0
-  ) || 0
+  if (data.length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.textAlign = 'center'
+    ctx.fillText('No payment trend data available', ctx.canvas.width / 2, ctx.canvas.height / 2)
+    return
+  }
   
-  const transportCost = parseFloat(costAnalysis.value.transport_costs?.total_transport_cost) || 0
+  paymentTrendsChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map(item => item.date),
+      datasets: [
+        {
+          label: 'Payment Count',
+          data: data.map(item => parseInt(item.count)),
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y'
+        },
+        {
+          label: 'Revenue',
+          data: data.map(item => parseFloat(item.total)),
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      scales: {
+        y: {
+          type: 'linear',
+          position: 'left',
+          title: {
+            display: true,
+            text: 'Payment Count'
+          }
+        },
+        y1: {
+          type: 'linear',
+          position: 'right',
+          title: {
+            display: true,
+            text: 'Revenue (GHS)'
+          },
+          grid: {
+            drawOnChartArea: false
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'top'
+        }
+      }
+    }
+  })
+}
+
+const renderPaymentMethodChart = () => {
+  if (!paymentMethodChart.value) return
   
-  costBreakdownChartInstance = new Chart(ctx, {
+  if (paymentMethodChartInstance) {
+    paymentMethodChartInstance.destroy()
+  }
+  
+  const ctx = paymentMethodChart.value.getContext('2d')
+  const data = paymentStatistics.value.payment_method_breakdown || {}
+  
+  if (Object.keys(data).length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.textAlign = 'center'
+    ctx.fillText('No payment method data available', ctx.canvas.width / 2, ctx.canvas.height / 2)
+    return
+  }
+  
+  const labels = Object.keys(data).map(key => formatPaymentMethod(key))
+  const counts = Object.values(data).map(item => parseInt(item.count))
+  
+  paymentMethodChartInstance = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Care Delivery', 'Transportation', 'Other Expenses'],
+      labels: labels,
       datasets: [{
-        data: [careDeliveryCost, transportCost, careDeliveryCost * 0.15],
-        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b']
+        data: counts,
+        backgroundColor: [
+          '#3b82f6',
+          '#10b981',
+          '#f59e0b',
+          '#ef4444',
+          '#8b5cf6',
+          '#ec4899'
+        ]
       }]
     },
     options: {
@@ -653,14 +690,21 @@ const renderCostBreakdownChart = () => {
 }
 
 const renderServicesChart = () => {
-  if (!servicesChart.value || !serviceUtilization.value.most_requested_services) return
+  if (!servicesChart.value) return
   
   if (servicesChartInstance) {
     servicesChartInstance.destroy()
   }
   
   const ctx = servicesChart.value.getContext('2d')
-  const data = serviceUtilization.value.most_requested_services
+  const data = serviceUtilization.value.most_requested_services || []
+  
+  if (data.length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.textAlign = 'center'
+    ctx.fillText('No service data available', ctx.canvas.width / 2, ctx.canvas.height / 2)
+    return
+  }
   
   servicesChartInstance = new Chart(ctx, {
     type: 'bar',
@@ -668,21 +712,23 @@ const renderServicesChart = () => {
       labels: data.map(item => formatCareType(item.care_type)),
       datasets: [{
         label: 'Request Count',
-        data: data.map(item => item.request_count),
-        backgroundColor: '#3b82f6'
+        data: data.map(item => parseInt(item.request_count)),
+        backgroundColor: '#3b82f6',
+        borderRadius: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      indexAxis: 'y',
+      scales: {
+        x: {
+          beginAtZero: true
+        }
+      },
       plugins: {
         legend: {
           display: false
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true
         }
       }
     }
@@ -690,51 +736,57 @@ const renderServicesChart = () => {
 }
 
 const renderPeakTimesChart = () => {
-  if (!peakTimesChart.value || !serviceUtilization.value.peak_usage_times) return
+  if (!peakTimesChart.value) return
   
   if (peakTimesChartInstance) {
     peakTimesChartInstance.destroy()
   }
   
   const ctx = peakTimesChart.value.getContext('2d')
-  const data = serviceUtilization.value.peak_usage_times
+  const data = serviceUtilization.value.peak_usage_times || []
+  
+  if (data.length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.textAlign = 'center'
+    ctx.fillText('No peak times data available', ctx.canvas.width / 2, ctx.canvas.height / 2)
+    return
+  }
   
   // Group by hour
-  const hourlyData = {}
+  const hourMap = new Map()
   data.forEach(item => {
-    if (!hourlyData[item.hour]) {
-      hourlyData[item.hour] = 0
+    const hour = parseInt(item.hour)
+    if (!hourMap.has(hour)) {
+      hourMap.set(hour, 0)
     }
-    hourlyData[item.hour] += item.schedule_count
+    hourMap.set(hour, hourMap.get(hour) + parseInt(item.schedule_count))
   })
   
-  const hours = Object.keys(hourlyData).sort((a, b) => a - b)
-  const counts = hours.map(hour => hourlyData[hour])
+  const hours = Array.from(hourMap.keys()).sort((a, b) => a - b)
+  const counts = hours.map(hour => hourMap.get(hour))
   
   peakTimesChartInstance = new Chart(ctx, {
-    type: 'line',
+    type: 'bar',
     data: {
-      labels: hours.map(hour => `${hour}:00`),
+      labels: hours.map(h => `${h}:00`),
       datasets: [{
-        label: 'Schedule Count',
+        label: 'Requests',
         data: counts,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-        fill: true
+        backgroundColor: '#10b981',
+        borderRadius: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
-        }
-      },
       scales: {
         y: {
           beginAtZero: true
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
         }
       }
     }
@@ -742,76 +794,112 @@ const renderPeakTimesChart = () => {
 }
 
 const renderRevenueTrendsChart = () => {
-  if (!revenueTrendsChart.value || !revenueAnalytics.value.transport_revenue) return
+  if (!revenueTrendsChart.value) return
   
   if (revenueTrendsChartInstance) {
     revenueTrendsChartInstance.destroy()
   }
   
   const ctx = revenueTrendsChart.value.getContext('2d')
-  const data = revenueAnalytics.value.transport_revenue
+  const data = revenueAnalytics.value.revenue_trends || []
   
-  // Group by date
-  const dailyRevenue = {}
+  if (data.length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.textAlign = 'center'
+    ctx.fillText('No revenue trend data available', ctx.canvas.width / 2, ctx.canvas.height / 2)
+    return
+  }
+  
+  // Group by date and payment type
+  const dateMap = new Map()
   data.forEach(item => {
-    if (!dailyRevenue[item.date]) {
-      dailyRevenue[item.date] = 0
+    if (!dateMap.has(item.date)) {
+      dateMap.set(item.date, { assessment: 0, care: 0 })
     }
-    dailyRevenue[item.date] += parseFloat(item.daily_revenue) || 0
+    const dateData = dateMap.get(item.date)
+    if (item.payment_type === 'assessment_fee') {
+      dateData.assessment += parseFloat(item.daily_revenue || 0)
+    } else if (item.payment_type === 'care_fee') {
+      dateData.care += parseFloat(item.daily_revenue || 0)
+    }
   })
   
-  const dates = Object.keys(dailyRevenue).sort()
-  const revenues = dates.map(date => dailyRevenue[date])
+  const dates = Array.from(dateMap.keys()).sort()
   
   revenueTrendsChartInstance = new Chart(ctx, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: dates,
-      datasets: [{
-        label: 'Daily Revenue',
-        data: revenues,
-        borderColor: '#10b981',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
+      datasets: [
+        {
+          label: 'Assessment Fees',
+          data: dates.map(date => dateMap.get(date).assessment),
+          backgroundColor: 'rgba(59, 130, 246, 0.8)',
+          borderColor: '#3b82f6',
+          borderWidth: 1
+        },
+        {
+          label: 'Care Fees',
+          data: dates.map(date => dateMap.get(date).care),
+          backgroundColor: 'rgba(16, 185, 129, 0.8)',
+          borderColor: '#10b981',
+          borderWidth: 1
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: false
+      scales: {
+        x: {
+          stacked: true
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true
         }
       },
-      scales: {
-        y: {
-          beginAtZero: true
+      plugins: {
+        legend: {
+          position: 'top'
         }
       }
     }
   })
 }
 
-const renderServiceRevenueChart = () => {
-  if (!serviceRevenueChart.value || !revenueAnalytics.value.service_revenue) return
+const renderRevenueByCareTypeChart = () => {
+  if (!revenueByCareTypeChart.value) return
   
-  if (serviceRevenueChartInstance) {
-    serviceRevenueChartInstance.destroy()
+  if (revenueByCareTypeChartInstance) {
+    revenueByCareTypeChartInstance.destroy()
   }
   
-  const ctx = serviceRevenueChart.value.getContext('2d')
-  const data = revenueAnalytics.value.service_revenue
+  const ctx = revenueByCareTypeChart.value.getContext('2d')
+  const data = revenueAnalytics.value.revenue_by_care_type || []
   
-  serviceRevenueChartInstance = new Chart(ctx, {
-    type: 'pie',
+  if (data.length === 0) {
+    ctx.fillStyle = '#6b7280'
+    ctx.textAlign = 'center'
+    ctx.fillText('No care type revenue data available', ctx.canvas.width / 2, ctx.canvas.height / 2)
+    return
+  }
+  
+  revenueByCareTypeChartInstance = new Chart(ctx, {
+    type: 'doughnut',
     data: {
       labels: data.map(item => formatCareType(item.care_type)),
       datasets: [{
-        data: data.map(item => parseFloat(item.estimated_revenue) || 0),
+        data: data.map(item => parseFloat(item.total_revenue)),
         backgroundColor: [
-          '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-          '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6b7280'
+          '#3b82f6',
+          '#10b981',
+          '#f59e0b',
+          '#ef4444',
+          '#8b5cf6',
+          '#ec4899',
+          '#06b6d4',
+          '#14b8a6'
         ]
       }]
     },
@@ -848,7 +936,7 @@ const handlePeriodChange = () => {
       dateFrom.setFullYear(today.getFullYear() - 1)
       break
     default:
-      return // custom range, don't change dates
+      return
   }
   
   filters.value.dateFrom = dateFrom.toISOString().split('T')[0]
@@ -865,11 +953,11 @@ const refreshAllReports = async () => {
   loading.value = true
   try {
     await Promise.all([
-      loadCostAnalysis(),
+      loadPaymentStatistics(),
       loadServiceUtilization(),
       loadRevenueAnalytics()
     ])
-    toast.showSuccess('Reports refreshed successfully')
+    toast.showSuccess('Financial reports refreshed successfully')
   } catch (error) {
     console.error('Error refreshing reports:', error)
     toast.showError('Failed to refresh reports')
@@ -880,123 +968,123 @@ const refreshAllReports = async () => {
 
 const exportReport = async (reportType) => {
   try {
-    const params = new URLSearchParams({
-      report_type: reportType,
-      format: 'csv',
+    const filterParams = {
       date_from: filters.value.dateFrom,
       date_to: filters.value.dateTo
-    })
-    
-    const response = await fetch(`/api/reports/export?${params}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-      }
-    })
-    
-    if (response.ok) {
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${reportType}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      
-      toast.showSuccess('Report exported successfully')
-    } else {
-      throw new Error('Export failed')
     }
+    
+    const { blob, filename } = await exportFinancialReport(reportType, filterParams)
+    
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    toast.showSuccess('Report exported successfully')
   } catch (error) {
     console.error('Error exporting report:', error)
-    toast.showError('Failed to export report')
+    toast.showError(error.message || 'Failed to export report')
   }
 }
 
-const exportAllReports = () => {
-  const reports = ['cost_analysis', 'service_utilization', 'revenue_analytics']
-  
-  reports.forEach((reportType, index) => {
-    setTimeout(() => exportReport(reportType), index * 1000)
-  })
-}
-
-const sendPaymentReminder = async (patientId) => {
+const exportAllReports = async () => {
   try {
-    const response = await fetch(`/api/patients/${patientId}/send-payment-reminder`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
+    const filterParams = {
+      date_from: filters.value.dateFrom,
+      date_to: filters.value.dateTo
+    }
+    
+    toast.showInfo('Exporting all reports... This may take a moment.')
+    
+    const results = await exportAllFinancialReports(filterParams)
+    
+    let successCount = 0
+    let failureCount = 0
+    
+    results.forEach(result => {
+      if (result.success) {
+        const url = window.URL.createObjectURL(result.blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = result.filename
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        successCount++
+      } else {
+        failureCount++
+        console.error(`Failed to export ${result.reportType}:`, result.error)
       }
     })
     
-    if (response.ok) {
-      toast.showSuccess('Payment reminder sent successfully')
-    } else {
-      throw new Error('Failed to send reminder')
+    if (successCount > 0) {
+      toast.showSuccess(`Successfully exported ${successCount} report(s)`)
+    }
+    
+    if (failureCount > 0) {
+      toast.showWarning(`${failureCount} report(s) failed to export`)
     }
   } catch (error) {
-    console.error('Error sending payment reminder:', error)
-    toast.showError('Failed to send payment reminder')
+    console.error('Error exporting all reports:', error)
+    toast.showError('Failed to export reports')
   }
 }
 
 // Utility functions
 const formatCurrency = (amount) => {
-  if (!amount) return '0.00'
-  return parseFloat(amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  if (amount === null || amount === undefined) return 'GHS 0.00'
+  const numAmount = parseFloat(amount)
+  return `GHS ${numAmount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
 }
 
-const formatCareType = (careType) => {
-  return careType.replace(/_/g, ' ')
-    .split(' ')
+const formatPaymentType = (type) => {
+  const typeMap = {
+    'assessment_fee': 'Assessment Fee',
+    'care_fee': 'Care Fee'
+  }
+  return typeMap[type] || type
+}
+
+const formatPaymentMethod = (method) => {
+  const methodMap = {
+    'mobile_money': 'Mobile Money',
+    'card': 'Card',
+    'bank_transfer': 'Bank Transfer',
+    'cash': 'Cash',
+    'not_specified': 'Not Specified'
+  }
+  return methodMap[method] || method
+}
+
+const formatCareType = (type) => {
+  return type
+    .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
-const formatSessionType = (sessionType) => {
-  return sessionType.replace(/_/g, ' ')
-    .split(' ')
+const formatSessionType = (type) => {
+  return type
+    .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
-const calculateUtilization = (totalPlans) => {
-  const max = Math.max(...(costAnalysis.value.resource_utilization?.map(r => r.total_plans) || [1]))
-  return Math.round((totalPlans / max) * 100)
+const calculatePercentage = (value) => {
+  if (!paymentStatistics.value.payment_type_breakdown) return 0
+  const total = paymentStatistics.value.payment_type_breakdown.reduce((sum, item) => sum + parseFloat(item.total_revenue || 0), 0)
+  return total > 0 ? Math.round((parseFloat(value) / total) * 100) : 0
 }
 
-const calculateLocationPercentage = (requestCount) => {
-  const total = serviceUtilization.value.geographic_utilization?.reduce((sum, item) => 
-    sum + item.request_count, 0
-  ) || 1
-  return Math.round((requestCount / total) * 100)
-}
-
-const getEfficiencyBadge = (avgDuration) => {
-  if (avgDuration <= 4) return 'badge badge-success'
-  if (avgDuration <= 6) return 'badge badge-warning'
-  return 'badge badge-danger'
-}
-
-const getEfficiencyStatus = (avgDuration) => {
-  if (avgDuration <= 4) return 'Efficient'
-  if (avgDuration <= 6) return 'Normal'
-  return 'Needs Review'
-}
-
-const getBalanceStatusBadge = (amount) => {
-  if (amount < 500) return 'badge badge-success'
-  if (amount < 1000) return 'badge badge-warning'
-  return 'badge badge-danger'
-}
-
-const getBalanceStatus = (amount) => {
-  if (amount < 500) return 'Low Priority'
-  if (amount < 1000) return 'Medium Priority'
-  return 'High Priority'
+const calculateLocationShare = (count) => {
+  if (!serviceUtilization.value.geographic_utilization) return 0
+  const total = serviceUtilization.value.geographic_utilization.reduce((sum, item) => sum + parseInt(item.request_count), 0)
+  return total > 0 ? Math.round((parseInt(count) / total) * 100) : 0
 }
 
 // Lifecycle
@@ -1006,6 +1094,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* All styles remain exactly the same */
 .reports-page {
   min-height: 100vh;
   background: #f8f9fa;
@@ -1103,15 +1192,11 @@ onMounted(() => {
   border-left: 4px solid #10b981;
 }
 
-.summary-card.costs {
-  border-left: 4px solid #ef4444;
-}
-
-.summary-card.profit {
+.summary-card.payments {
   border-left: 4px solid #3b82f6;
 }
 
-.summary-card.transactions {
+.summary-card.average {
   border-left: 4px solid #f59e0b;
 }
 
@@ -1130,17 +1215,12 @@ onMounted(() => {
   color: #065f46;
 }
 
-.summary-card.costs .summary-icon {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.summary-card.profit .summary-icon {
+.summary-card.payments .summary-icon {
   background: #dbeafe;
   color: #1e40af;
 }
 
-.summary-card.transactions .summary-icon {
+.summary-card.average .summary-icon {
   background: #fef3c7;
   color: #92400e;
 }
@@ -1182,6 +1262,10 @@ onMounted(() => {
 
 .summary-change.negative {
   color: #ef4444;
+}
+
+.summary-change.neutral {
+  color: #6b7280;
 }
 
 .summary-change svg {
@@ -1267,6 +1351,7 @@ onMounted(() => {
 
 .table-container {
   padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .table-container h4 {
@@ -1306,63 +1391,20 @@ onMounted(() => {
   background: #f9fafb;
 }
 
-.cost-value {
-  color: #1f2937;
-  font-weight: 600;
-  font-family: 'Courier New', monospace;
-}
-
-.cost-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-}
-
-.cost-summary-item {
-  background: #f9fafb;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  text-align: center;
-}
-
-.cost-label {
-  font-size: 0.875rem;
-  color: #6b7280;
-  margin-bottom: 0.5rem;
-}
-
-.cost-amount {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.care-type-badge,
-.service-badge {
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.375rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
+.type-badge,
+.session-badge {
   display: inline-block;
-}
-
-.location-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.location-info svg {
-  color: #6b7280;
-  flex-shrink: 0;
-}
-
-.nurse-info strong {
-  display: block;
-  color: #1f2937;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
   font-weight: 500;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.revenue-value {
+  color: #10b981;
+  font-weight: 600;
 }
 
 .progress-bar {
@@ -1390,77 +1432,129 @@ onMounted(() => {
   color: #1f2937;
 }
 
-.performance-indicators {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  padding: 1.5rem;
+.location-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.indicator-card {
+.patient-info strong {
+  display: block;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.comparison-card {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.comparison-card h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 1rem 0;
+}
+
+.comparison-content {
   display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 2rem;
+}
+
+.comparison-item {
+  text-align: center;
+}
+
+.comparison-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.comparison-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.comparison-value.current {
+  color: #10b981;
+}
+
+.comparison-value.previous {
+  color: #6b7280;
+}
+
+.comparison-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.comparison-arrow span {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.text-success {
+  color: #10b981;
+}
+
+.text-danger {
+  color: #ef4444;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
   padding: 1.5rem;
-  background: #f9fafb;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.indicator-icon {
-  width: 48px;
-  height: 48px;
+.metric-card {
+  background: #f8fafc;
   border-radius: 0.5rem;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.metric-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 0.5rem;
+  background: #dbeafe;
+  color: #1e40af;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.revenue-icon {
-  background: #d1fae5;
-  color: #065f46;
+.metric-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
-.collection-icon {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.profit-icon {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.indicator-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
-.indicator-content {
+.metric-content {
   flex: 1;
 }
 
-.indicator-label {
-  font-size: 0.875rem;
+.metric-label {
+  font-size: 0.75rem;
   color: #6b7280;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-}
-
-.indicator-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1f2937;
   margin-bottom: 0.25rem;
 }
 
-.indicator-value.positive {
-  color: #10b981;
-}
-
-.indicator-description {
-  font-size: 0.75rem;
-  color: #6b7280;
+.metric-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
 }
 
 .form-control {
@@ -1488,5 +1582,56 @@ onMounted(() => {
   color: #374151;
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
+}
+
+.btn-primary:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+  background: #f9fafb;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 </style>

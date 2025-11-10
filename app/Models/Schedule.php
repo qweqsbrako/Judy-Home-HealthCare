@@ -117,9 +117,14 @@ class Schedule extends Model
 
     public function getFormattedTimeSlotAttribute(): string
     {
-        // ✅ FIXED: Parse times correctly
+        // Parse times correctly
         $start = $this->parseTime($this->start_time);
         $end = $this->parseTime($this->end_time);
+        
+        // Handle null values
+        if (!$start || !$end) {
+            return 'Not scheduled';
+        }
         
         return $start->format('H:i') . ' - ' . $end->format('H:i');
     }
@@ -152,22 +157,32 @@ class Schedule extends Model
         return null;
     }
 
-    // ✅ NEW: Helper method to parse time correctly
-    private function parseTime($time): Carbon
+    //Helper method to parse time correctly
+    private function parseTime($time): ?Carbon
     {
+        // Handle null values
+        if ($time === null) {
+            return null;
+        }
+        
         // If it's already a Carbon instance, return it
         if ($time instanceof Carbon) {
             return $time;
         }
         
         // If it's a string with full datetime
-        if (strlen($time) > 8) {
+        if (is_string($time) && strlen($time) > 8) {
             $parsed = Carbon::parse($time);
             return Carbon::createFromTime($parsed->hour, $parsed->minute, $parsed->second);
         }
         
         // If it's just a time string (HH:MM:SS or HH:MM)
-        return Carbon::createFromTimeString($time);
+        if (is_string($time)) {
+            return Carbon::createFromTimeString($time);
+        }
+        
+        // Fallback to null for any other cases
+        return null;
     }
 
     // Methods

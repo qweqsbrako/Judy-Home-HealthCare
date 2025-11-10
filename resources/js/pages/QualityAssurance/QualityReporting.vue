@@ -105,7 +105,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            Nurse Performance ({{ nursePerformance.length }})
+            Nurse Performance ({{ nursePerformance.total || 0 }})
           </button>
           <button
             @click="activeTab = 'incidents'"
@@ -363,6 +363,47 @@
                   </tr>
                 </tbody>
               </table>
+<!-- ADD PAGINATION HERE -->
+      <div v-if="nursePerformance.last_page > 1" class="pagination-container">
+        <div class="pagination-info">
+          Showing {{ (nursePerformance.current_page - 1) * nursePerformance.per_page + 1 }} to {{ Math.min(nursePerformance.current_page * nursePerformance.per_page, nursePerformance.total) }} of {{ nursePerformance.total }} nurses
+        </div>
+        <div class="pagination-controls">
+          <button 
+            @click="prevPerformancePage" 
+            :disabled="nursePerformance.current_page === 1"
+            class="pagination-btn"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Previous
+          </button>
+          
+          <div class="pagination-pages">
+            <button
+              v-for="page in getPerformancePaginationPages()"
+              :key="page"
+              @click="goToPerformancePage(page)"
+              :class="['pagination-page', { active: page === nursePerformance.current_page }]"
+            >
+              {{ page }}
+            </button>
+          </div>
+          
+          <button 
+            @click="nextPerformancePage" 
+            :disabled="nursePerformance.current_page === nursePerformance.last_page"
+            class="pagination-btn"
+          >
+            Next
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+        </div>
+              
             </div>
 
             <div v-else class="empty-state">
@@ -600,7 +641,7 @@
                     <span class="label">Total Responses</span>
                   </div>
                   <div class="secondary-metric">
-                    <span class="value">{{ qualityMetrics.patient_satisfaction?.response_rate || 0 }}%</span>
+                    <span class="value">{{ qualityMetrics.patient_satisfaction?.feedback_response_rate || 0 }}%</span>
                     <span class="label">Response Rate</span>
                   </div>
                 </div>
@@ -665,6 +706,119 @@
           </div>
         </div>
       </div>
+
+
+      <!-- View Feedback Details Modal -->
+<div v-if="showViewFeedbackModal && currentFeedback" class="modal-overlay" @click.self="closeViewFeedbackModal">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <h3 class="modal-title">
+        <svg class="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        Feedback Details
+      </h3>
+      <button @click="closeViewFeedbackModal" class="modal-close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <div class="feedback-details">
+        <!-- Rating Section -->
+        <div class="feedback-detail-section">
+          <h5>Rating</h5>
+          <div class="rating-display-large">
+            <div class="stars-large">
+              <span v-for="i in 5" :key="i" :class="['star-large', { 'star-filled': i <= currentFeedback.rating }]">★</span>
+            </div>
+            <span class="rating-number-large">{{ currentFeedback.rating }}/5</span>
+          </div>
+        </div>
+
+        <!-- People Section -->
+        <div class="feedback-detail-section">
+          <h5>Details</h5>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>Patient:</label>
+              <span>{{ currentFeedback.patient_name }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Nurse:</label>
+              <span>{{ currentFeedback.nurse_name }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Care Date:</label>
+              <span>{{ formatDate(currentFeedback.care_date) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Feedback Date:</label>
+              <span>{{ formatDateTime(currentFeedback.feedback_date) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Would Recommend:</label>
+              <span :class="currentFeedback.would_recommend ? 'text-success' : 'text-muted'">
+                {{ currentFeedback.would_recommend ? 'Yes' : 'No' }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <label>Status:</label>
+              <span :class="'modern-badge ' + getFeedbackStatusBadgeColor(currentFeedback.status)">
+                {{ capitalizeFirst(currentFeedback.status) }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feedback Text Section -->
+        <div class="feedback-detail-section">
+          <h5>Feedback</h5>
+          <div class="feedback-text-full">
+            {{ currentFeedback.feedback_text }}
+          </div>
+        </div>
+
+        <!-- Response Section (if responded) -->
+        <div v-if="currentFeedback.status === 'responded' && currentFeedback.response_text" class="feedback-detail-section">
+          <h5>Admin Response</h5>
+          <div class="response-container">
+            <div class="response-header">
+              <div class="response-meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Responded on {{ formatDateTime(currentFeedback.responded_at) }}
+              </div>
+              <span class="modern-badge badge-success">Resolved</span>
+            </div>
+            <div class="response-content">
+              <p class="response-text">{{ currentFeedback.response_text }}</p>
+              <div v-if="currentFeedback.responded_by_name" class="response-footer">
+                Responded by: <strong>{{ currentFeedback.responded_by_name }}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button @click="closeViewFeedbackModal" class="btn-modern btn-secondary">
+        Close
+      </button>
+      <button
+        v-if="currentFeedback.status === 'pending'"
+        @click="respondToFeedbackFromView"
+        class="btn-modern btn-primary"
+      >
+        Respond to Feedback
+      </button>
+    </div>
+  </div>
+</div>
 
       <!-- Nurse Performance Details Modal -->
       <div v-if="showNurseDetailsModal && currentNurse" class="modal-overlay" @click.self="closeNurseDetailsModal">
@@ -1194,6 +1348,7 @@ const loading = ref(true)
 const activeTab = ref('feedback')
 const overview = ref({})
 const qualityMetrics = ref({})
+const showViewFeedbackModal = ref(false)
 
 // Patient Feedback data
 const patientFeedback = ref({ data: [], total: 0, per_page: 15, current_page: 1, last_page: 1 })
@@ -1257,18 +1412,12 @@ const filteredFeedback = computed(() => {
 })
 
 const filteredNursePerformance = computed(() => {
-  if (!Array.isArray(nursePerformance.value)) return []
-  
-  return nursePerformance.value.filter(nurse => {
-    const matchesSearch = !performanceSearch.value || 
-      nurse.name.toLowerCase().includes(performanceSearch.value.toLowerCase()) ||
-      nurse.license_number.toLowerCase().includes(performanceSearch.value.toLowerCase())
-    
-    const matchesGrade = performanceGradeFilter.value === 'all' || 
-      nurse.performance_grade === performanceGradeFilter.value
-    
-    return matchesSearch && matchesGrade
-  })
+  console.log('nursePerformance.value:', nursePerformance.value)
+  console.log('nursePerformance.value.data:', nursePerformance.value.data)
+  const result = nursePerformance.value.data || []
+  console.log('filteredNursePerformance result:', result)
+  console.log('filteredNursePerformance length:', result.length)
+  return result
 })
 
 const filteredIncidents = computed(() => {
@@ -1322,14 +1471,63 @@ const loadPatientFeedback = async (page = 1) => {
   }
 }
 
-const loadNursePerformance = async () => {
+const loadNursePerformance = async (page = 1) => {
   try {
-    const response = await qualityReportsService.getNursePerformance(performanceTimeframe.value)
-    nursePerformance.value = response.data || []
+    const filters = {
+      page: page,
+      per_page: 15,
+      timeframe: performanceTimeframe.value,
+      grade: performanceGradeFilter.value !== 'all' ? performanceGradeFilter.value : undefined,
+      search: performanceSearch.value || undefined
+    }
+    
+    Object.keys(filters).forEach(key => filters[key] === undefined && delete filters[key])
+    
+    console.log('Loading nurse performance with filters:', filters)
+    
+    const response = await qualityReportsService.getNursePerformance(filters)
+    
+    console.log('Full API Response:', response)
+    console.log('Response data:', response.data)
+    console.log('Response pagination:', response.pagination)
+    
+    if (response.success && response.pagination) {
+      nursePerformance.value = {
+        data: response.data || [],
+        total: response.pagination.total || 0,
+        current_page: response.pagination.current_page || 1,
+        last_page: response.pagination.last_page || 1,
+        per_page: response.pagination.per_page || 15
+      }
+      
+      console.log('Set nursePerformance.value to:', nursePerformance.value)
+    }
   } catch (error) {
     console.error('Error loading nurse performance data:', error)
+    toast.showError('Failed to load nurse performance data')
   }
 }
+
+// Pagination methods for nurse performance
+const goToPerformancePage = (page) => {
+  if (page >= 1 && page <= nursePerformance.value.last_page) {
+    loadNursePerformance(page)
+  }
+}
+
+const nextPerformancePage = () => {
+  if (nursePerformance.value.current_page < nursePerformance.value.last_page) {
+    goToPerformancePage(nursePerformance.value.current_page + 1)
+  }
+}
+
+const prevPerformancePage = () => {
+  if (nursePerformance.value.current_page > 1) {
+    goToPerformancePage(nursePerformance.value.current_page - 1)
+  }
+}
+
+
 
 const loadIncidentReports = async (page = 1) => {
   try {
@@ -1422,6 +1620,7 @@ const openCreateIncidentModal = () => {
 
 const viewFeedback = (feedback) => {
   currentFeedback.value = feedback
+  showViewFeedbackModal.value = true
   activeDropdown.value = null
 }
 
@@ -1430,6 +1629,19 @@ const respondToFeedback = (feedback) => {
   responseText.value = ''
   showResponseModal.value = true
   activeDropdown.value = null
+}
+
+const closeViewFeedbackModal = () => {
+  showViewFeedbackModal.value = false
+  if (!showResponseModal.value) {
+    currentFeedback.value = null
+  }
+}
+
+const respondToFeedbackFromView = () => {
+  showViewFeedbackModal.value = false
+  responseText.value = ''
+  showResponseModal.value = true
 }
 
 const viewNurseDetails = (nurse) => {
@@ -1562,8 +1774,8 @@ const deleteIncident = async () => {
 
 const closeResponseModal = () => {
   showResponseModal.value = false
-  currentFeedback.value = null
   responseText.value = ''
+  currentFeedback.value = null
 }
 
 const submitResponse = async () => {
@@ -1574,7 +1786,7 @@ const submitResponse = async () => {
       response_text: responseText.value
     })
     
-    await loadPatientFeedback()
+    await loadPatientFeedback(patientFeedback.value.current_page) 
     closeResponseModal()
     toast.showSuccess('Response sent successfully!')
   } catch (error) {
@@ -1701,6 +1913,24 @@ const getIncidentPaginationPages = () => {
   const maxVisible = 5
   let start = Math.max(1, incidentReports.value.current_page - Math.floor(maxVisible / 2))
   let end = Math.min(incidentReports.value.last_page, start + maxVisible - 1)
+  
+  if (end - start < maxVisible - 1) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  
+  return pages
+}
+
+
+const getPerformancePaginationPages = () => {
+  const pages = []
+  const maxVisible = 5
+  let start = Math.max(1, nursePerformance.value.current_page - Math.floor(maxVisible / 2))
+  let end = Math.min(nursePerformance.value.last_page, start + maxVisible - 1)
   
   if (end - start < maxVisible - 1) {
     start = Math.max(1, end - maxVisible + 1)
@@ -3321,6 +3551,182 @@ onUnmounted(() => {
 .incident-summary-box .summary-item:last-child,
 .feedback-summary-box p:last-child {
   margin-bottom: 0;
+}
+
+
+.feedback-details {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.feedback-detail-section h5 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.rating-display-large {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.stars-large {
+  display: flex;
+  gap: 4px;
+}
+
+.star-large {
+  font-size: 28px;
+  color: #d1d5db;
+}
+
+.star-large.star-filled {
+  color: #f59e0b;
+}
+
+.rating-number-large {
+  font-size: 20px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.detail-item {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.detail-item label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-item span {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.text-success {
+  color: #10b981 !important;
+  font-weight: 600;
+}
+
+.text-muted {
+  color: #94a3b8 !important;
+}
+
+.feedback-text-full {
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 12px;
+  color: #334155;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.response-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.response-meta {
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.response-text {
+  color: #1e40af;
+  line-height: 1.6;
+}
+
+.response-container {
+  background: white;
+  border: 1px solid #e0e7ff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.response-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f0f9ff;
+  border-bottom: 1px solid #e0e7ff;
+}
+
+.response-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.response-meta svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.response-content {
+  padding: 16px;
+}
+
+.response-text {
+  color: #334155;
+  line-height: 1.6;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+}
+
+.response-footer {
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.response-footer strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Responsive Design for Modals */

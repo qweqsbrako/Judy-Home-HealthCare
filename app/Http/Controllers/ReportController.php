@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\CarePlan;
 use App\Models\Schedule;
 use App\Models\TimeTracking;
+use App\Models\CarePayment;
 use App\Models\ProgressNote;
 use App\Models\MedicalAssessment;
 use App\Models\Driver;
@@ -362,6 +363,7 @@ class ReportController extends Controller
      * ================================
      */
 
+
     /**
      * Nurse Productivity Report
      */
@@ -375,35 +377,88 @@ class ReportController extends Controller
 
         $nurseId = $request->get('nurse_id');
 
-        // Hours worked by nurse
-        $hoursWorkedQuery = TimeTracking::selectRaw('
-            nurse_id,
-            SUM(total_duration_minutes) / 60 as total_hours,
-            COUNT(*) as total_sessions,
-            AVG(total_duration_minutes) / 60 as avg_session_hours
-        ')
-        ->whereBetween('start_time', [$dateFromStart, $dateToEnd])
-        ->where('status', 'completed')
-        ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id');
+        // Hours worked by nurse (from completed schedules)
+        $hoursWorkedQuery = DB::table('schedules as s')
+            ->selectRaw("
+                s.nurse_id,
+                -- Scheduled hours (from duration_minutes)
+                COALESCE(SUM(s.duration_minutes), 0) / 60.0 as total_hours,
+                -- Actual hours worked (from actual_start_time and actual_end_time)
+                COALESCE(SUM(
+                    CASE 
+                        WHEN s.actual_start_time IS NOT NULL AND s.actual_end_time IS NOT NULL 
+                        THEN TIMESTAMPDIFF(MINUTE, s.actual_start_time, s.actual_end_time) 
+                        ELSE s.duration_minutes 
+                    END
+                ), 0) / 60.0 as actual_hours,
+                COUNT(*) as total_sessions,
+                COALESCE(AVG(s.duration_minutes), 0) / 60.0 as avg_session_hours
+            ")
+            ->whereBetween('s.schedule_date', [$dateFromStart, $dateToEnd])
+            ->where('s.status', 'completed')
+            ->whereNull('s.deleted_at')
+            ->groupBy('s.nurse_id');
 
         if ($nurseId) {
-            $hoursWorkedQuery->where('nurse_id', $nurseId);
+            $hoursWorkedQuery->where('s.nurse_id', $nurseId);
         }
 
-        $hoursWorked = $hoursWorkedQuery->get();
+        $hoursWorked = $hoursWorkedQuery->get()
+            ->map(function($item) {
+                $nurse = User::select('id', 'first_name', 'last_name')->find($item->nurse_id);
+                
+                $totalHours = round((float)($item->total_hours ?? 0), 1);
+                $actualHours = round((float)($item->actual_hours ?? 0), 1);
+                
+                // Calculate overtime as the difference (only if positive)
+                $overtimeHours = max(0, $actualHours - $totalHours);
+                
+                return (object)[
+                    'nurse_id' => $item->nurse_id,
+                    'total_hours' => $totalHours,
+                    'actual_hours' => $actualHours,
+                    'overtime_hours' => round($overtimeHours, 1),
+                    'total_sessions' => (int)($item->total_sessions ?? 0),
+                    'avg_session_hours' => round((float)($item->avg_session_hours ?? 0), 2),
+                    'nurse' => $nurse
+                ];
+            });
 
-        // Patient visits
-        $patientVisits = ProgressNote::selectRaw('
-            nurse_id,
-            COUNT(DISTINCT patient_id) as unique_patients,
-            COUNT(*) as total_visits,
-            AVG(pain_level) as avg_pain_level_recorded
-        ')
-        ->whereBetween('visit_date', [$dateFromStart, $dateToEnd])
-        ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id')
-        ->get();
+        // Patient visits (from completed schedules with care plans)
+        $patientVisitsQuery = DB::table('schedules as s')
+            ->join('care_plans as cp', 's.care_plan_id', '=', 'cp.id')
+            ->selectRaw('
+                s.nurse_id,
+                COUNT(DISTINCT cp.patient_id) as unique_patients,
+                COUNT(*) as total_visits,
+                AVG(CASE 
+                    WHEN s.actual_start_time IS NOT NULL AND s.actual_end_time IS NOT NULL 
+                    THEN TIMESTAMPDIFF(MINUTE, s.actual_start_time, s.actual_end_time) 
+                    ELSE s.duration_minutes 
+                END) / 60 as avg_visit_duration
+            ')
+            ->whereBetween('s.schedule_date', [$dateFromStart, $dateToEnd])
+            ->where('s.status', 'completed')
+            ->whereNotNull('s.care_plan_id')
+            ->whereNull('s.deleted_at')
+            ->whereNull('cp.deleted_at')
+            ->groupBy('s.nurse_id');
+
+        if ($nurseId) {
+            $patientVisitsQuery->where('s.nurse_id', $nurseId);
+        }
+
+        $patientVisits = $patientVisitsQuery->get()
+            ->map(function($item) {
+                $nurse = User::select('id', 'first_name', 'last_name')->find($item->nurse_id);
+                return (object)[
+                    'nurse_id' => $item->nurse_id,
+                    'unique_patients' => $item->unique_patients,
+                    'total_visits' => $item->total_visits,
+                    'avg_visit_duration' => round($item->avg_visit_duration, 1),
+                    'nurse' => $nurse
+                ];
+            });
 
         // Care plan involvement
         $carePlanInvolvement = Schedule::selectRaw('
@@ -425,6 +480,55 @@ class ReportController extends Controller
         ]);
     }
 
+
+    private function writeScheduleComplianceCsv($file, $data)
+    {
+        // On-time rates section
+        if (!empty($data['on_time_rates'])) {
+            fputcsv($file, ['=== ON-TIME PERFORMANCE ===']);
+            fputcsv($file, ['Nurse ID', 'Nurse Name', 'Total Shifts', 'Completed Shifts', 'On-Time Shifts', 'On-Time Rate %']);
+            foreach ($data['on_time_rates'] as $row) {
+                fputcsv($file, [
+                    $row['nurse_id'],
+                    ($row['nurse']['first_name'] ?? '') . ' ' . ($row['nurse']['last_name'] ?? ''),
+                    $row['total_shifts'],
+                    $row['completed_shifts'],
+                    $row['on_time_shifts'],
+                    $row['on_time_rate']
+                ]);
+            }
+            fputcsv($file, []); // Empty row
+        }
+
+        // No-shows and cancellations section
+        if (!empty($data['no_shows'])) {
+            fputcsv($file, ['=== NO-SHOWS AND CANCELLATIONS ===']);
+            fputcsv($file, ['Nurse ID', 'Nurse Name', 'Cancelled Shifts', 'No-Show Shifts', 'Total Scheduled']);
+            foreach ($data['no_shows'] as $row) {
+                fputcsv($file, [
+                    $row['nurse_id'],
+                    ($row['nurse']['first_name'] ?? '') . ' ' . ($row['nurse']['last_name'] ?? ''),
+                    $row['cancelled_shifts'],
+                    $row['no_show_shifts'],
+                    $row['total_scheduled']
+                ]);
+            }
+            fputcsv($file, []); // Empty row
+        }
+
+        // Completions summary (changed from confirmations)
+        if (!empty($data['completions'])) {
+            fputcsv($file, ['=== COMPLETION SUMMARY ===']);
+            fputcsv($file, ['Total Scheduled', 'Completed', 'Completion Rate %']);
+            fputcsv($file, [
+                $data['completions']['total_scheduled'],
+                $data['completions']['completed'],
+                $data['completions']['completion_rate']
+            ]);
+        }
+    }
+
+
     /**
      * Schedule Compliance Report
      */
@@ -436,49 +540,120 @@ class ReportController extends Controller
         $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
         $dateToEnd = Carbon::parse($dateTo)->endOfDay();
 
-        // On-time rates
-        $onTimeRates = Schedule::selectRaw('
+        $nurseId = $request->get('nurse_id');
+
+        // On-time rates with completed shifts
+        $onTimeRatesQuery = Schedule::selectRaw('
             nurse_id,
             COUNT(*) as total_shifts,
-            COUNT(CASE WHEN actual_start_time IS NOT NULL AND 
-                  TIMESTAMPDIFF(MINUTE, CONCAT(schedule_date, " ", start_time), actual_start_time) <= 15 
-                  THEN 1 END) as on_time_shifts,
-            ROUND(COUNT(CASE WHEN actual_start_time IS NOT NULL AND 
-                       TIMESTAMPDIFF(MINUTE, CONCAT(schedule_date, " ", start_time), actual_start_time) <= 15 
-                       THEN 1 END) * 100.0 / COUNT(*), 2) as on_time_rate
+            COUNT(CASE WHEN status = "completed" THEN 1 END) as completed_shifts,
+            COUNT(CASE WHEN status = "completed" AND actual_start_time IS NOT NULL AND 
+                TIMESTAMPDIFF(MINUTE, CONCAT(schedule_date, " ", start_time), actual_start_time) <= 15 
+                THEN 1 END) as on_time_shifts,
+            ROUND(COUNT(CASE WHEN status = "completed" AND actual_start_time IS NOT NULL AND 
+                    TIMESTAMPDIFF(MINUTE, CONCAT(schedule_date, " ", start_time), actual_start_time) <= 15 
+                    THEN 1 END) * 100.0 / GREATEST(COUNT(CASE WHEN status = "completed" THEN 1 END), 1), 2) as on_time_rate
         ')
         ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
         ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id')
-        ->get();
+        ->groupBy('nurse_id');
+
+        if ($nurseId) {
+            $onTimeRatesQuery->where('nurse_id', $nurseId);
+        }
+
+        $onTimeRates = $onTimeRatesQuery->get();
 
         // No-shows and cancellations
-        $noShows = Schedule::selectRaw('
+        $noShowsQuery = Schedule::selectRaw('
             nurse_id,
             COUNT(CASE WHEN status = "cancelled" THEN 1 END) as cancelled_shifts,
-            COUNT(CASE WHEN actual_start_time IS NULL AND schedule_date < CURDATE() THEN 1 END) as no_show_shifts,
+            COUNT(CASE WHEN actual_start_time IS NULL AND schedule_date < CURDATE() AND status != "cancelled" THEN 1 END) as no_show_shifts,
             COUNT(*) as total_scheduled
         ')
         ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
         ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id')
-        ->get();
+        ->groupBy('nurse_id');
 
-        // Schedule confirmations
-        $confirmations = Schedule::selectRaw('
+        if ($nurseId) {
+            $noShowsQuery->where('nurse_id', $nurseId);
+        }
+
+        $noShows = $noShowsQuery->get();
+
+        // Schedule completions (changed from confirmations)
+        $completionsQuery = Schedule::selectRaw('
             COUNT(*) as total_scheduled,
-            COUNT(CASE WHEN nurse_confirmed_at IS NOT NULL THEN 1 END) as confirmed,
-            ROUND(COUNT(CASE WHEN nurse_confirmed_at IS NOT NULL THEN 1 END) * 100.0 / COUNT(*), 2) as confirmation_rate
+            COUNT(CASE WHEN status = "completed" THEN 1 END) as completed,
+            ROUND(COUNT(CASE WHEN status = "completed" THEN 1 END) * 100.0 / COUNT(*), 2) as completion_rate
         ')
-        ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
-        ->first();
+        ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd]);
+
+        if ($nurseId) {
+            $completionsQuery->where('nurse_id', $nurseId);
+        }
+
+        $completions = $completionsQuery->first();
 
         return response()->json([
             'on_time_rates' => $onTimeRates,
             'no_shows' => $noShows,
-            'confirmations' => $confirmations
+            'completions' => $completions  
         ]);
     }
+
+
+    private function writeTimeTrackingAnalyticsCsv($file, $data)
+    {
+        // Total hours section
+        if (!empty($data['total_hours'])) {
+            fputcsv($file, ['=== WORK HOURS & OVERTIME ANALYSIS ===']);
+            fputcsv($file, ['Nurse ID', 'Nurse Name', 'Total Hours (Scheduled)', 'Actual Hours', 'Overtime Hours', 'Avg Session', 'Total Sessions']);
+            foreach ($data['total_hours'] as $row) {
+                fputcsv($file, [
+                    $row->nurse_id,
+                    ($row->nurse->first_name ?? '') . ' ' . ($row->nurse->last_name ?? ''),
+                    round($row->total_hours, 1),
+                    round($row->actual_hours, 1),
+                    round($row->overtime_hours, 1),
+                    round($row->avg_session_hours, 2),
+                    $row->total_sessions
+                ]);
+            }
+            fputcsv($file, []); // Empty row
+        }
+
+        // Break patterns section
+        if (!empty($data['break_patterns'])) {
+            fputcsv($file, ['=== BREAK PATTERNS ===']);
+            fputcsv($file, ['Nurse ID', 'Nurse Name', 'Avg Breaks per Shift', 'Avg Break Duration (min)', 'Total Break Hours']);
+            foreach ($data['break_patterns'] as $row) {
+                fputcsv($file, [
+                    $row['nurse_id'],
+                    ($row['nurse']['first_name'] ?? '') . ' ' . ($row['nurse']['last_name'] ?? ''),
+                    round($row['avg_breaks_per_shift'] ?? 0, 2),
+                    round($row['avg_break_duration'] ?? 0, 2),
+                    round($row['total_break_hours'] ?? 0, 2)
+                ]);
+            }
+            fputcsv($file, []); // Empty row
+        }
+
+        // Session types section
+        if (!empty($data['session_types'])) {
+            fputcsv($file, ['=== SESSION TYPES DISTRIBUTION ===']);
+            fputcsv($file, ['Session Type', 'Count', 'Total Hours', 'Avg Duration']);
+            foreach ($data['session_types'] as $row) {
+                fputcsv($file, [
+                    $row->session_type,
+                    $row->count,
+                    round($row->total_hours, 2),
+                    round($row->avg_duration, 2)
+                ]);
+            }
+        }
+    }
+
 
     /**
      * Time Tracking Analytics
@@ -491,21 +666,55 @@ class ReportController extends Controller
         $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
         $dateToEnd = Carbon::parse($dateTo)->endOfDay();
 
-        // Total hours analysis
-        $totalHours = TimeTracking::selectRaw('
-            nurse_id,
-            SUM(total_duration_minutes) / 60 as total_hours,
-            SUM(CASE WHEN total_duration_minutes > 480 THEN total_duration_minutes - 480 ELSE 0 END) / 60 as overtime_hours,
-            AVG(total_duration_minutes) / 60 as avg_session_hours
-        ')
-        ->whereBetween('start_time', [$dateFromStart, $dateToEnd])
-        ->where('status', 'completed')
-        ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id')
-        ->get();
+        $nurseId = $request->get('nurse_id');
 
-        // Break patterns
-        $breakPatterns = TimeTracking::selectRaw('
+        // Total hours analysis (from completed schedules)
+        $totalHoursQuery = DB::table('schedules as s')
+            ->selectRaw("
+                s.nurse_id,
+                -- Scheduled hours
+                COALESCE(SUM(s.duration_minutes), 0) / 60.0 as total_hours,
+                -- Actual hours worked
+                COALESCE(SUM(CASE 
+                    WHEN s.actual_start_time IS NOT NULL AND s.actual_end_time IS NOT NULL 
+                    THEN TIMESTAMPDIFF(MINUTE, s.actual_start_time, s.actual_end_time) 
+                    ELSE s.duration_minutes 
+                END), 0) / 60.0 as actual_hours,
+                COALESCE(AVG(s.duration_minutes), 0) / 60.0 as avg_session_hours,
+                COUNT(*) as total_sessions
+            ")
+            ->whereBetween('s.schedule_date', [$dateFromStart, $dateToEnd])
+            ->where('s.status', 'completed')
+            ->whereNull('s.deleted_at')
+            ->groupBy('s.nurse_id');
+
+        if ($nurseId) {
+            $totalHoursQuery->where('s.nurse_id', $nurseId);
+        }
+
+        $totalHours = $totalHoursQuery->get()
+            ->map(function($item) {
+                $nurse = User::select('id', 'first_name', 'last_name')->find($item->nurse_id);
+                
+                $totalHours = round((float)($item->total_hours ?? 0), 1);
+                $actualHours = round((float)($item->actual_hours ?? 0), 1);
+                
+                // Calculate overtime as the difference (only if positive)
+                $overtimeHours = max(0, $actualHours - $totalHours);
+                
+                return (object)[
+                    'nurse_id' => $item->nurse_id,
+                    'total_hours' => $totalHours,
+                    'actual_hours' => $actualHours,
+                    'overtime_hours' => round($overtimeHours, 1),
+                    'avg_session_hours' => round((float)($item->avg_session_hours ?? 0), 2),
+                    'total_sessions' => (int)($item->total_sessions ?? 0),
+                    'nurse' => $nurse
+                ];
+            });
+
+        // Break patterns (from time tracking)
+        $breakPatternsQuery = TimeTracking::selectRaw('
             nurse_id,
             AVG(break_count) as avg_breaks_per_shift,
             AVG(total_break_minutes) as avg_break_duration,
@@ -514,20 +723,32 @@ class ReportController extends Controller
         ->whereBetween('start_time', [$dateFromStart, $dateToEnd])
         ->where('status', 'completed')
         ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id')
-        ->get();
+        ->groupBy('nurse_id');
 
-        // Session types analysis
-        $sessionTypes = TimeTracking::selectRaw('
-            session_type,
-            COUNT(*) as count,
-            SUM(total_duration_minutes) / 60 as total_hours,
-            AVG(total_duration_minutes) / 60 as avg_duration
-        ')
-        ->whereBetween('start_time', [$dateFromStart, $dateToEnd])
-        ->where('status', 'completed')
-        ->groupBy('session_type')
-        ->get();
+        if ($nurseId) {
+            $breakPatternsQuery->where('nurse_id', $nurseId);
+        }
+
+        $breakPatterns = $breakPatternsQuery->get();
+
+        // Session types analysis (from schedules)
+        $sessionTypesQuery = DB::table('schedules')
+            ->selectRaw('
+                shift_type as session_type,
+                COUNT(*) as count,
+                SUM(duration_minutes) / 60 as total_hours,
+                AVG(duration_minutes) / 60 as avg_duration
+            ')
+            ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
+            ->where('status', 'completed')
+            ->whereNull('deleted_at')
+            ->groupBy('shift_type');
+
+        if ($nurseId) {
+            $sessionTypesQuery->where('nurse_id', $nurseId);
+        }
+
+        $sessionTypes = $sessionTypesQuery->get();
 
         return response()->json([
             'total_hours' => $totalHours,
@@ -572,24 +793,61 @@ class ReportController extends Controller
 
         $vitalsTrends = $vitalsTrendsQuery->get();
 
-        // Condition improvements/deteriorations
-        $conditionTrends = ProgressNote::selectRaw('
-            patient_id,
-            general_condition,
-            COUNT(*) as count,
-            AVG(pain_level) as avg_pain_level
-        ')
-        ->whereBetween('visit_date', [$dateFromStart, $dateToEnd])
-        ->with('patient:id,first_name,last_name')
-        ->groupBy('patient_id', 'general_condition')
-        ->get();
+        // Get latest condition record for each patient with aggregated stats
+        $conditionTrends = DB::table('progress_notes as pn1')
+            ->select([
+                'pn1.patient_id',
+                'pn1.general_condition',
+                DB::raw("(SELECT COUNT(*) FROM progress_notes pn2 
+                        WHERE pn2.patient_id = pn1.patient_id 
+                        AND pn2.visit_date BETWEEN '{$dateFromStart}' AND '{$dateToEnd}'
+                        AND pn2.deleted_at IS NULL) as count"),
+                DB::raw("(SELECT AVG(pain_level) FROM progress_notes pn3 
+                        WHERE pn3.patient_id = pn1.patient_id 
+                        AND pn3.visit_date BETWEEN '{$dateFromStart}' AND '{$dateToEnd}'
+                        AND pn3.deleted_at IS NULL) as avg_pain_level"),
+                'pn1.visit_date as latest_visit'
+            ])
+            ->whereIn('pn1.id', function($query) use ($dateFromStart, $dateToEnd) {
+                $query->select(DB::raw('MAX(id)'))
+                    ->from('progress_notes')
+                    ->whereBetween('visit_date', [$dateFromStart, $dateToEnd])
+                    ->whereNull('deleted_at')
+                    ->groupBy('patient_id');
+            })
+            ->whereBetween('pn1.visit_date', [$dateFromStart, $dateToEnd])
+            ->whereNull('pn1.deleted_at');
+
+        // Apply patient filter if specified
+        if ($patientId) {
+            $conditionTrends->where('pn1.patient_id', $patientId);
+        }
+
+        $conditionTrends = $conditionTrends->get()
+            ->map(function($item) {
+                // Attach patient relationship
+                $patient = User::select('id', 'first_name', 'last_name')
+                            ->find($item->patient_id);
+                
+                return (object)[
+                    'patient_id' => $item->patient_id,
+                    'patient_name' => $patient ? $patient->first_name . ' ' . $patient->last_name : 'Unknown',
+                    'general_condition' => $item->general_condition,
+                    'count' => $item->count,
+                    'avg_pain_level' => round($item->avg_pain_level ?? 0, 1),
+                    'latest_visit' => $item->latest_visit,
+                    'patient' => $patient
+                ];
+            });
 
         return response()->json([
             'vitals_trends' => $vitalsTrends,
             'condition_trends' => $conditionTrends
         ]);
     }
-
+    /**
+     * Progress Notes Analytics
+     */
     /**
      * Progress Notes Analytics
      */
@@ -597,44 +855,85 @@ class ReportController extends Controller
     {
         $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
         $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
+        $patientId = $request->get('patient_id');
 
         $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
         $dateToEnd = Carbon::parse($dateTo)->endOfDay();
 
-        // Visit frequency by patient
-        $visitFrequency = ProgressNote::selectRaw('
-            patient_id,
-            COUNT(*) as total_visits,
-            COUNT(DISTINCT nurse_id) as different_nurses,
-            AVG(pain_level) as avg_pain_level,
-            MIN(visit_date) as first_visit,
-            MAX(visit_date) as last_visit
-        ')
-        ->whereBetween('visit_date', [$dateFromStart, $dateToEnd])
-        ->with('patient:id,first_name,last_name')
-        ->groupBy('patient_id')
-        ->get();
+        // Visit frequency by patient (using completed schedules)
+        $visitFrequencyQuery = DB::table('schedules as s')
+            ->join('care_plans as cp', 's.care_plan_id', '=', 'cp.id')
+            ->select([
+                'cp.patient_id',
+                DB::raw('COUNT(s.id) as total_visits'),
+                DB::raw('COUNT(DISTINCT s.nurse_id) as different_nurses'),
+                DB::raw('MIN(s.schedule_date) as first_visit'),
+                DB::raw('MAX(s.schedule_date) as last_visit'),
+                DB::raw("(SELECT AVG(pn.pain_level) 
+                        FROM progress_notes pn 
+                        WHERE pn.patient_id = cp.patient_id 
+                        AND pn.visit_date BETWEEN '{$dateFromStart}' AND '{$dateToEnd}'
+                        AND pn.deleted_at IS NULL) as avg_pain_level")
+            ])
+            ->where('s.status', 'completed')
+            ->whereNotNull('s.care_plan_id')
+            ->whereBetween('s.schedule_date', [$dateFromStart, $dateToEnd])
+            ->whereNull('s.deleted_at')
+            ->whereNull('cp.deleted_at')
+            ->groupBy('cp.patient_id');
 
-        // Pain level trends
-        $painLevelTrends = ProgressNote::selectRaw('
+        // Apply patient filter if specified
+        if ($patientId) {
+            $visitFrequencyQuery->where('cp.patient_id', $patientId);
+        }
+
+        $visitFrequency = $visitFrequencyQuery->get()
+            ->map(function($item) {
+                // Attach patient relationship
+                $patient = User::select('id', 'first_name', 'last_name')
+                            ->find($item->patient_id);
+                
+                return (object)[
+                    'patient_id' => $item->patient_id,
+                    'total_visits' => $item->total_visits,
+                    'different_nurses' => $item->different_nurses,
+                    'avg_pain_level' => round($item->avg_pain_level ?? 0, 1),
+                    'first_visit' => $item->first_visit,
+                    'last_visit' => $item->last_visit,
+                    'patient' => $patient
+                ];
+            });
+
+        // Pain level trends (from progress notes)
+        $painLevelTrendsQuery = ProgressNote::selectRaw('
             DATE(visit_date) as date,
             AVG(pain_level) as avg_pain_level,
             COUNT(*) as visits_count
         ')
         ->whereBetween('visit_date', [$dateFromStart, $dateToEnd])
         ->groupBy('date')
-        ->orderBy('date')
-        ->get();
+        ->orderBy('date');
+
+        if ($patientId) {
+            $painLevelTrendsQuery->where('patient_id', $patientId);
+        }
+
+        $painLevelTrends = $painLevelTrendsQuery->get();
 
         // Intervention effectiveness (based on general condition improvements)
-        $interventionEffectiveness = ProgressNote::selectRaw('
+        $interventionEffectivenessQuery = ProgressNote::selectRaw('
             general_condition,
             COUNT(*) as count,
-            COUNT(CASE WHEN interventions IS NOT NULL THEN 1 END) as with_interventions
+            COUNT(CASE WHEN interventions IS NOT NULL AND interventions != "" THEN 1 END) as with_interventions
         ')
         ->whereBetween('visit_date', [$dateFromStart, $dateToEnd])
-        ->groupBy('general_condition')
-        ->get();
+        ->groupBy('general_condition');
+
+        if ($patientId) {
+            $interventionEffectivenessQuery->where('patient_id', $patientId);
+        }
+
+        $interventionEffectiveness = $interventionEffectivenessQuery->get();
 
         return response()->json([
             'visit_frequency' => $visitFrequency,
@@ -1156,211 +1455,553 @@ class ReportController extends Controller
      * ================================
      */
 
+  
     /**
-     * Cost Analysis Report
-     */
-    public function costAnalysisReport(Request $request)
-    {
-        $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
-        $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
+ * ================================
+ * FINANCIAL REPORTS
+ * ================================
+ */
 
-        $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
-        $dateToEnd = Carbon::parse($dateTo)->endOfDay();
+/**
+ * Payment Statistics Report
+ */
+public function paymentStatisticsReport(Request $request)
+{
+    $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+    $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
 
-        // Care delivery costs (estimated based on time tracking)
-        $careDeliveryCosts = TimeTracking::selectRaw('
-            nurse_id,
-            SUM(total_duration_minutes) / 60 as total_hours,
-            SUM(total_duration_minutes) / 60 * 25 as estimated_cost_usd
-        ') // Assuming $25/hour average cost
-        ->whereBetween('start_time', [$dateFromStart, $dateToEnd])
-        ->where('status', 'completed')
-        ->with('nurse:id,first_name,last_name')
-        ->groupBy('nurse_id')
-        ->get();
+    $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
+    $dateToEnd = Carbon::parse($dateTo)->endOfDay();
 
-        // Transportation costs
-        $transportCosts = TransportRequest::selectRaw('
-            SUM(actual_cost) as total_transport_cost,
-            AVG(actual_cost) as avg_cost_per_trip,
-            SUM(distance_km) as total_distance,
-            COUNT(*) as total_trips
-        ')
-        ->where('status', 'completed')
-        ->whereNotNull('actual_cost')
-        ->whereBetween('completed_at', [$dateFromStart, $dateToEnd])
-        ->first();
+    // Basic counts by status
+    $totalPayments = CarePayment::whereBetween('created_at', [$dateFromStart, $dateToEnd])->count();
+    $completedPayments = CarePayment::where('status', 'completed')
+        ->whereBetween('created_at', [$dateFromStart, $dateToEnd])
+        ->count();
+    $pendingPayments = CarePayment::whereIn('status', ['pending', 'processing'])
+        ->whereBetween('created_at', [$dateFromStart, $dateToEnd])
+        ->count();
+    $failedPayments = CarePayment::where('status', 'failed')
+        ->whereBetween('created_at', [$dateFromStart, $dateToEnd])
+        ->count();
 
-        // Resource utilization by care type
-        $resourceUtilization = CarePlan::selectRaw('
-            care_type,
-            COUNT(*) as total_plans,
-            AVG(DATEDIFF(COALESCE(end_date, NOW()), start_date)) as avg_duration_days
-        ')
-        ->whereBetween('start_date', [$dateFromStart, $dateToEnd])
-        ->groupBy('care_type')
-        ->get();
+    // Revenue calculations
+    $totalRevenue = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->sum('total_amount');
+    
+    $assessmentRevenue = CarePayment::where('status', 'completed')
+        ->where('payment_type', 'assessment_fee')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->sum('total_amount');
+    
+    $careRevenue = CarePayment::where('status', 'completed')
+        ->where('payment_type', 'care_fee')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->sum('total_amount');
 
-        // Cost per patient analysis
-        $costPerPatient = DB::table('time_trackings as tt')
-            ->select([
-                'tt.patient_id',
-                DB::raw('SUM(tt.total_duration_minutes) / 60 as total_care_hours'),
-                DB::raw('SUM(tt.total_duration_minutes) / 60 * 25 as estimated_cost')
-            ])
-            ->whereNotNull('tt.patient_id')
-            ->whereBetween('tt.start_time', [$dateFromStart, $dateToEnd])
-            ->where('tt.status', 'completed')
-            ->groupBy('tt.patient_id')
-            ->get();
+    // This period's revenue
+    $thisPeriodRevenue = $totalRevenue;
 
-        return response()->json([
-            'care_delivery_costs' => $careDeliveryCosts,
-            'transport_costs' => $transportCosts,
-            'resource_utilization' => $resourceUtilization,
-            'cost_per_patient' => $costPerPatient
-        ]);
+    // Previous period revenue for comparison
+    $periodDays = $dateFromStart->diffInDays($dateToEnd);
+    $previousPeriodStart = $dateFromStart->copy()->subDays($periodDays);
+    $previousPeriodEnd = $dateFromStart->copy()->subDay();
+
+    $previousPeriodRevenue = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$previousPeriodStart, $previousPeriodEnd])
+        ->sum('total_amount');
+
+    // Calculate period-over-period change
+    $revenueChange = 0;
+    if ($previousPeriodRevenue > 0) {
+        $revenueChange = (($thisPeriodRevenue - $previousPeriodRevenue) / $previousPeriodRevenue) * 100;
+    } elseif ($thisPeriodRevenue > 0) {
+        $revenueChange = 100;
     }
 
-    /**
-     * Service Utilization Report
-     */
-    public function serviceUtilizationReport(Request $request)
-    {
-        $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
-        $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
+    // Average payment amount
+    $averagePaymentAmount = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->avg('total_amount');
 
+    // Payment method breakdown
+    $paymentMethodBreakdown = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->select('payment_method', DB::raw('count(*) as count'), DB::raw('sum(total_amount) as total'))
+        ->groupBy('payment_method')
+        ->get()
+        ->mapWithKeys(function ($item) {
+            return [$item->payment_method ?: 'not_specified' => [
+                'count' => $item->count,
+                'total' => $item->total
+            ]];
+        });
 
-        $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
-        $dateToEnd = Carbon::parse($dateTo)->endOfDay();
+    // Payment trends over the period
+    $paymentTrends = CarePayment::whereBetween('created_at', [$dateFromStart, $dateToEnd])
+        ->selectRaw('DATE(created_at) as date, count(*) as count, sum(CASE WHEN status = "completed" THEN total_amount ELSE 0 END) as total')
+        ->groupBy('date')
+        ->orderBy('date')
+        ->get();
 
-        // Most requested services (care types)
-        $mostRequestedServices = CarePlan::selectRaw('
-            care_type,
-            COUNT(*) as request_count,
-            COUNT(*) * 100.0 / (SELECT COUNT(*) FROM care_plans WHERE deleted_at IS NULL) as percentage
-        ')
-        ->whereBetween('created_at', [$dateFromStart, $dateToEnd])
-        ->groupBy('care_type')
+    // Payment type breakdown
+    $paymentTypeBreakdown = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->select('payment_type', DB::raw('count(*) as count'), DB::raw('sum(total_amount) as total'))
+        ->groupBy('payment_type')
+        ->get();
+
+    return response()->json([
+        'total_payments' => $totalPayments,
+        'completed_payments' => $completedPayments,
+        'pending_payments' => $pendingPayments,
+        'failed_payments' => $failedPayments,
+        'total_revenue' => round($totalRevenue, 2),
+        'assessment_revenue' => round($assessmentRevenue, 2),
+        'care_revenue' => round($careRevenue, 2),
+        'this_period_revenue' => round($thisPeriodRevenue, 2),
+        'revenue_change_percentage' => round($revenueChange, 2),
+        'average_payment_amount' => round($averagePaymentAmount ?? 0, 2),
+        'payment_method_breakdown' => $paymentMethodBreakdown,
+        'payment_trends' => $paymentTrends,
+        'payment_type_breakdown' => $paymentTypeBreakdown,
+        'completion_rate' => $totalPayments > 0 
+            ? round(($completedPayments / $totalPayments) * 100, 2) 
+            : 0
+    ]);
+}
+
+/**
+ * Service Utilization Report
+ */
+public function serviceUtilizationReport(Request $request)
+{
+    $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+    $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
+
+    $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
+    $dateToEnd = Carbon::parse($dateTo)->endOfDay();
+
+    // Most requested services (care types from care requests with payments)
+    $mostRequestedServices = DB::table('care_payments as cp')
+        ->join('care_requests as cr', 'cp.care_request_id', '=', 'cr.id')
+        ->select('cr.care_type', DB::raw('COUNT(*) as request_count'))
+        ->whereBetween('cp.created_at', [$dateFromStart, $dateToEnd])
+        ->whereNull('cp.deleted_at')
+        ->whereNull('cr.deleted_at')
+        ->groupBy('cr.care_type')
         ->orderBy('request_count', 'desc')
         ->get();
 
-        // Peak usage times (based on schedules)
-        $peakUsageTimes = Schedule::selectRaw('
-            HOUR(start_time) as hour,
-            COUNT(*) as schedule_count,
-            shift_type
-        ')
-        ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
-        ->groupBy('hour', 'shift_type')
-        ->orderBy('schedule_count', 'desc')
-        ->get();
+    $totalRequests = $mostRequestedServices->sum('request_count');
 
-        // Service duration analysis
-        $serviceDuration = TimeTracking::selectRaw('
-            session_type,
-            COUNT(*) as session_count,
-            AVG(total_duration_minutes) / 60 as avg_duration_hours,
-            SUM(total_duration_minutes) / 60 as total_hours
-        ')
-        ->whereBetween('start_time', [$dateFromStart, $dateToEnd])
-        ->where('status', 'completed')
-        ->groupBy('session_type')
-        ->get();
+    $mostRequestedServices = $mostRequestedServices->map(function($item) use ($totalRequests) {
+        return [
+            'care_type' => $item->care_type,
+            'request_count' => $item->request_count,
+            'percentage' => $totalRequests > 0 ? round(($item->request_count / $totalRequests) * 100, 2) : 0
+        ];
+    });
 
-        // Geographic utilization (top pickup locations for transport)
-        $geographicUtilization = TransportRequest::selectRaw('
-            pickup_location,
-            COUNT(*) as request_count
-        ')
-        ->whereBetween('created_at', [$dateFromStart, $dateToEnd])
-        ->groupBy('pickup_location')
+    // Peak usage times (based on schedules)
+    $peakUsageTimes = Schedule::selectRaw('
+        HOUR(start_time) as hour,
+        COUNT(*) as schedule_count,
+        shift_type
+    ')
+    ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
+    ->groupBy('hour', 'shift_type')
+    ->orderBy('schedule_count', 'desc')
+    ->get();
+
+    // Service duration analysis (from completed schedules)
+    $serviceDuration = Schedule::selectRaw('
+        shift_type as session_type,
+        COUNT(*) as session_count,
+        SUM(duration_minutes) / 60 as total_hours,
+        AVG(duration_minutes) / 60 as avg_duration_hours
+    ')
+    ->whereBetween('schedule_date', [$dateFromStart, $dateToEnd])
+    ->where('status', 'completed')
+    ->groupBy('shift_type')
+    ->get();
+
+    // Geographic utilization (top service locations from care requests)
+    $geographicUtilization = DB::table('care_requests as cr')
+        ->join('care_payments as cp', 'cr.id', '=', 'cp.care_request_id')
+        ->select('cr.city as pickup_location', DB::raw('COUNT(*) as request_count'))
+        ->whereBetween('cp.created_at', [$dateFromStart, $dateToEnd])
+        ->whereNotNull('cr.city')
+        ->whereNull('cr.deleted_at')
+        ->whereNull('cp.deleted_at')
+        ->groupBy('cr.city')
         ->orderBy('request_count', 'desc')
         ->limit(10)
         ->get();
 
-        return response()->json([
-            'most_requested_services' => $mostRequestedServices,
-            'peak_usage_times' => $peakUsageTimes,
-            'service_duration' => $serviceDuration,
-            'geographic_utilization' => $geographicUtilization
-        ]);
-    }
+    return response()->json([
+        'most_requested_services' => $mostRequestedServices,
+        'peak_usage_times' => $peakUsageTimes,
+        'service_duration' => $serviceDuration,
+        'geographic_utilization' => $geographicUtilization
+    ]);
+}
 
-    /**
-     * Revenue Analytics
-     */
-    public function revenueAnalytics(Request $request)
-    {
-        $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
-        $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
+/**
+ * Revenue Analytics
+ */
+public function revenueAnalytics(Request $request)
+{
+    $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+    $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
 
-        $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
-        $dateToEnd = Carbon::parse($dateTo)->endOfDay();
+    $dateFromStart = Carbon::parse($dateFrom)->startOfDay();
+    $dateToEnd = Carbon::parse($dateTo)->endOfDay();
 
-        // Revenue from transport services
-        $transportRevenue = TransportRequest::selectRaw('
-            DATE(completed_at) as date,
-            SUM(actual_cost) as daily_revenue,
-            COUNT(*) as trips_completed,
-            transport_type
+    // Revenue trends over time
+    $revenueTrends = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->selectRaw('
+            DATE(paid_at) as date,
+            payment_type,
+            SUM(total_amount) as daily_revenue,
+            COUNT(*) as transactions
         ')
-        ->where('status', 'completed')
-        ->whereNotNull('actual_cost')
-        ->whereBetween('completed_at', [$dateFromStart, $dateTo])
-        ->groupBy('date', 'transport_type')
+        ->groupBy('date', 'payment_type')
         ->orderBy('date')
         ->get();
 
-        // Revenue by service type (estimated based on care hours)
-        $serviceRevenue = DB::table('time_trackings as tt')
-            ->join('care_plans as cp', 'tt.care_plan_id', '=', 'cp.id')
-            ->select([
-                'cp.care_type',
-                DB::raw('SUM(tt.total_duration_minutes) / 60 as total_hours'),
-                DB::raw('SUM(tt.total_duration_minutes) / 60 * 35 as estimated_revenue') // $35/hour service rate
-            ])
-            ->whereNotNull('tt.care_plan_id')
-            ->where('tt.status', 'completed')
-            ->whereBetween('tt.start_time', [$dateFromStart, $dateToEnd])
-            ->groupBy('cp.care_type')
-            ->get();
+    // Revenue by payment type
+    $revenueByType = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->select('payment_type', DB::raw('SUM(total_amount) as total_revenue'), DB::raw('COUNT(*) as count'))
+        ->groupBy('payment_type')
+        ->get();
 
-        // Payment processing metrics (mock data - would need actual payment table)
-        $paymentMetrics = [
-            'total_processed' => TransportRequest::where('status', 'completed')
-                ->whereNotNull('actual_cost')
-                ->whereBetween('completed_at', [$dateFromStart, $dateToEnd])
-                ->sum('actual_cost'),
-            'avg_transaction_value' => TransportRequest::where('status', 'completed')
-                ->whereNotNull('actual_cost')
-                ->whereBetween('completed_at', [$dateFromStart, $dateToEnd])
-                ->avg('actual_cost'),
-            'transaction_count' => TransportRequest::where('status', 'completed')
-                ->whereNotNull('actual_cost')
-                ->whereBetween('completed_at', [$dateFromStart, $dateToEnd])
-                ->count()
-        ];
+    // Revenue by care type (joining with care_requests)
+    $revenueByCareType = DB::table('care_payments as cp')
+        ->join('care_requests as cr', 'cp.care_request_id', '=', 'cr.id')
+        ->select('cr.care_type', DB::raw('SUM(cp.total_amount) as total_revenue'), DB::raw('COUNT(*) as count'))
+        ->where('cp.status', 'completed')
+        ->whereBetween('cp.paid_at', [$dateFromStart, $dateToEnd])
+        ->whereNull('cp.deleted_at')
+        ->whereNull('cr.deleted_at')
+        ->groupBy('cr.care_type')
+        ->orderBy('total_revenue', 'desc')
+        ->get();
 
-        // Outstanding balances (estimated)
-        $outstandingBalances = DB::table('care_plans as cp')
-            ->join('time_trackings as tt', 'cp.id', '=', 'tt.care_plan_id')
-            ->select([
-                'cp.patient_id',
-                DB::raw('SUM(tt.total_duration_minutes) / 60 * 35 as estimated_amount_due')
-            ])
-            ->where('cp.status', 'active')
-            ->where('tt.status', 'completed')
-            ->groupBy('cp.patient_id')
-            ->get();
+    // Payment metrics
+    $paymentMetrics = [
+        'total_processed' => CarePayment::where('status', 'completed')
+            ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+            ->sum('total_amount'),
+        'avg_transaction_value' => CarePayment::where('status', 'completed')
+            ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+            ->avg('total_amount'),
+        'transaction_count' => CarePayment::where('status', 'completed')
+            ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+            ->count(),
+        'total_tax_collected' => CarePayment::where('status', 'completed')
+            ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+            ->sum('tax_amount')
+    ];
 
-        return response()->json([
-            'transport_revenue' => $transportRevenue,
-            'service_revenue' => $serviceRevenue,
-            'payment_metrics' => $paymentMetrics,
-            'outstanding_balances' => $outstandingBalances
-        ]);
+    // Monthly comparison
+    $thisMonth = Carbon::now();
+    $lastMonth = Carbon::now()->subMonth();
+
+    $thisMonthRevenue = CarePayment::where('status', 'completed')
+        ->whereYear('paid_at', $thisMonth->year)
+        ->whereMonth('paid_at', $thisMonth->month)
+        ->sum('total_amount');
+
+    $lastMonthRevenue = CarePayment::where('status', 'completed')
+        ->whereYear('paid_at', $lastMonth->year)
+        ->whereMonth('paid_at', $lastMonth->month)
+        ->sum('total_amount');
+
+    $monthlyComparison = [
+        'this_month' => round($thisMonthRevenue, 2),
+        'last_month' => round($lastMonthRevenue, 2),
+        'change_amount' => round($thisMonthRevenue - $lastMonthRevenue, 2),
+        'change_percentage' => $lastMonthRevenue > 0 
+            ? round((($thisMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 2) 
+            : ($thisMonthRevenue > 0 ? 100 : 0)
+    ];
+
+    // Top paying patients
+    $topPayingPatients = DB::table('care_payments as cp')
+        ->join('users as u', 'cp.patient_id', '=', 'u.id')
+        ->select(
+            'cp.patient_id',
+            'u.first_name',
+            'u.last_name',
+            'u.email',
+            DB::raw('SUM(cp.total_amount) as total_paid'),
+            DB::raw('COUNT(*) as payment_count')
+        )
+        ->where('cp.status', 'completed')
+        ->whereBetween('cp.paid_at', [$dateFromStart, $dateToEnd])
+        ->whereNull('cp.deleted_at')
+        ->groupBy('cp.patient_id', 'u.first_name', 'u.last_name', 'u.email')
+        ->orderBy('total_paid', 'desc')
+        ->limit(10)
+        ->get();
+
+    // Revenue by currency
+    $revenueByCurrency = CarePayment::where('status', 'completed')
+        ->whereBetween('paid_at', [$dateFromStart, $dateToEnd])
+        ->select('currency', DB::raw('SUM(total_amount) as total'), DB::raw('COUNT(*) as count'))
+        ->groupBy('currency')
+        ->get();
+
+    return response()->json([
+        'revenue_trends' => $revenueTrends,
+        'revenue_by_type' => $revenueByType,
+        'revenue_by_care_type' => $revenueByCareType,
+        'payment_metrics' => $paymentMetrics,
+        'monthly_comparison' => $monthlyComparison,
+        'top_paying_patients' => $topPayingPatients,
+        'revenue_by_currency' => $revenueByCurrency
+    ]);
+}
+
+/**
+ * Export financial reports
+ */
+public function exportFinancialReports(Request $request)
+{
+    $reportType = $request->get('report_type');
+    $format = $request->get('format', 'csv');
+    $dateFrom = $request->get('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+    $dateTo = $request->get('date_to', Carbon::now()->format('Y-m-d'));
+
+    $data = [];
+    $filename = '';
+
+    switch ($reportType) {
+        case 'payment_statistics':
+            $response = $this->paymentStatisticsReport($request);
+            $data = $response->getData(true);
+            $filename = 'payment_statistics_report';
+            break;
+
+        case 'service_utilization':
+            $response = $this->serviceUtilizationReport($request);
+            $data = $response->getData(true);
+            $filename = 'service_utilization_report';
+            break;
+
+        case 'revenue_analytics':
+            $response = $this->revenueAnalytics($request);
+            $data = $response->getData(true);
+            $filename = 'revenue_analytics_report';
+            break;
+
+        default:
+            return response()->json(['error' => 'Invalid report type'], 400);
     }
+
+    if ($format === 'csv') {
+        return $this->exportFinancialToCsv($data, $filename, $reportType);
+    }
+
+    return response()->json(['error' => 'Unsupported format'], 400);
+}
+
+/**
+ * Export financial data to CSV format
+ */
+private function exportFinancialToCsv($data, $filename, $reportType)
+{
+    $headers = [
+        'Content-Type' => 'text/csv',
+        'Content-Disposition' => "attachment; filename=\"{$filename}_" . date('Y-m-d') . ".csv\"",
+    ];
+
+    $callback = function() use ($data, $reportType) {
+        $file = fopen('php://output', 'w');
+        
+        switch ($reportType) {
+            case 'payment_statistics':
+                $this->writePaymentStatisticsCsv($file, $data);
+                break;
+            case 'service_utilization':
+                $this->writeServiceUtilizationCsv($file, $data);
+                break;
+            case 'revenue_analytics':
+                $this->writeRevenueAnalyticsCsv($file, $data);
+                break;
+        }
+        
+        fclose($file);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
+
+/**
+ * Write payment statistics data to CSV
+ */
+private function writePaymentStatisticsCsv($file, $data)
+{
+    // Summary section
+    fputcsv($file, ['=== PAYMENT SUMMARY ===']);
+    fputcsv($file, ['Metric', 'Value']);
+    fputcsv($file, ['Total Payments', $data['total_payments']]);
+    fputcsv($file, ['Completed Payments', $data['completed_payments']]);
+    fputcsv($file, ['Pending Payments', $data['pending_payments']]);
+    fputcsv($file, ['Failed Payments', $data['failed_payments']]);
+    fputcsv($file, ['Total Revenue', '$' . number_format($data['total_revenue'], 2)]);
+    fputcsv($file, ['Assessment Revenue', '$' . number_format($data['assessment_revenue'], 2)]);
+    fputcsv($file, ['Care Revenue', '$' . number_format($data['care_revenue'], 2)]);
+    fputcsv($file, ['Average Payment', '$' . number_format($data['average_payment_amount'], 2)]);
+    fputcsv($file, ['Completion Rate', $data['completion_rate'] . '%']);
+    fputcsv($file, ['Revenue Change', $data['revenue_change_percentage'] . '%']);
+    fputcsv($file, []);
+
+    // Payment trends section
+    if (!empty($data['payment_trends'])) {
+        fputcsv($file, ['=== PAYMENT TRENDS ===']);
+        fputcsv($file, ['Date', 'Count', 'Total Amount']);
+        foreach ($data['payment_trends'] as $trend) {
+            fputcsv($file, [
+                $trend['date'],
+                $trend['count'],
+                '$' . number_format($trend['total'], 2)
+            ]);
+        }
+        fputcsv($file, []);
+    }
+
+    // Payment method breakdown
+    if (!empty($data['payment_method_breakdown'])) {
+        fputcsv($file, ['=== PAYMENT METHOD BREAKDOWN ===']);
+        fputcsv($file, ['Payment Method', 'Count', 'Total Amount']);
+        foreach ($data['payment_method_breakdown'] as $method => $info) {
+            fputcsv($file, [
+                ucwords(str_replace('_', ' ', $method)),
+                $info['count'],
+                '$' . number_format($info['total'], 2)
+            ]);
+        }
+    }
+}
+
+/**
+ * Write service utilization data to CSV
+ */
+private function writeServiceUtilizationCsv($file, $data)
+{
+    // Most requested services
+    if (!empty($data['most_requested_services'])) {
+        fputcsv($file, ['=== MOST REQUESTED SERVICES ===']);
+        fputcsv($file, ['Care Type', 'Request Count', 'Percentage']);
+        foreach ($data['most_requested_services'] as $service) {
+            fputcsv($file, [
+                ucwords(str_replace('_', ' ', $service['care_type'])),
+                $service['request_count'],
+                $service['percentage'] . '%'
+            ]);
+        }
+        fputcsv($file, []);
+    }
+
+    // Service duration
+    if (!empty($data['service_duration'])) {
+        fputcsv($file, ['=== SERVICE DURATION ANALYSIS ===']);
+        fputcsv($file, ['Session Type', 'Session Count', 'Total Hours', 'Avg Duration (hours)']);
+        foreach ($data['service_duration'] as $duration) {
+            fputcsv($file, [
+                ucwords(str_replace('_', ' ', $duration['session_type'])),
+                $duration['session_count'],
+                round($duration['total_hours'], 2),
+                round($duration['avg_duration_hours'], 2)
+            ]);
+        }
+        fputcsv($file, []);
+    }
+
+    // Geographic utilization
+    if (!empty($data['geographic_utilization'])) {
+        fputcsv($file, ['=== TOP SERVICE LOCATIONS ===']);
+        fputcsv($file, ['Location', 'Request Count']);
+        foreach ($data['geographic_utilization'] as $location) {
+            fputcsv($file, [
+                $location->pickup_location,
+                $location->request_count
+            ]);
+        }
+    }
+}
+
+/**
+ * Write revenue analytics data to CSV
+ */
+private function writeRevenueAnalyticsCsv($file, $data)
+{
+    // Payment metrics
+    if (!empty($data['payment_metrics'])) {
+        fputcsv($file, ['=== PAYMENT METRICS ===']);
+        fputcsv($file, ['Metric', 'Value']);
+        fputcsv($file, ['Total Processed', '$' . number_format($data['payment_metrics']['total_processed'], 2)]);
+        fputcsv($file, ['Avg Transaction Value', '$' . number_format($data['payment_metrics']['avg_transaction_value'], 2)]);
+        fputcsv($file, ['Transaction Count', $data['payment_metrics']['transaction_count']]);
+        fputcsv($file, ['Total Tax Collected', '$' . number_format($data['payment_metrics']['total_tax_collected'], 2)]);
+        fputcsv($file, []);
+    }
+
+    // Monthly comparison
+    if (!empty($data['monthly_comparison'])) {
+        fputcsv($file, ['=== MONTHLY COMPARISON ===']);
+        fputcsv($file, ['Period', 'Revenue', 'Change']);
+        fputcsv($file, [
+            'This Month',
+            '$' . number_format($data['monthly_comparison']['this_month'], 2),
+            ''
+        ]);
+        fputcsv($file, [
+            'Last Month',
+            '$' . number_format($data['monthly_comparison']['last_month'], 2),
+            ''
+        ]);
+        fputcsv($file, [
+            'Change',
+            '$' . number_format($data['monthly_comparison']['change_amount'], 2),
+            $data['monthly_comparison']['change_percentage'] . '%'
+        ]);
+        fputcsv($file, []);
+    }
+
+    // Revenue by type
+    if (!empty($data['revenue_by_type'])) {
+        fputcsv($file, ['=== REVENUE BY PAYMENT TYPE ===']);
+        fputcsv($file, ['Payment Type', 'Total Revenue', 'Count']);
+        foreach ($data['revenue_by_type'] as $type) {
+            fputcsv($file, [
+                ucwords(str_replace('_', ' ', $type['payment_type'])),
+                '$' . number_format($type['total_revenue'], 2),
+                $type['count']
+            ]);
+        }
+        fputcsv($file, []);
+    }
+
+    // Top paying patients
+    if (!empty($data['top_paying_patients'])) {
+        fputcsv($file, ['=== TOP PAYING PATIENTS ===']);
+        fputcsv($file, ['Patient Name', 'Email', 'Total Paid', 'Payment Count']);
+        foreach ($data['top_paying_patients'] as $patient) {
+            fputcsv($file, [
+                $patient->first_name . ' ' . $patient->last_name,
+                $patient->email,
+                '$' . number_format($patient->total_paid, 2),
+                $patient->payment_count
+            ]);
+        }
+    }
+}
 
     /**
      * Export report data as CSV
