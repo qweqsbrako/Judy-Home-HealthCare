@@ -132,8 +132,12 @@ class NurseController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        \Log::info("Store Nurse");
+        \Log::info("Store Nurse - Raw Request Data");
         \Log::info($request->all());
+        
+        // Debug the send_invite value specifically
+        \Log::info("send_invite raw value: " . var_export($request->input('send_invite'), true));
+        \Log::info("send_invite as boolean: " . var_export($request->boolean('send_invite'), true));
         
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:255',
@@ -145,27 +149,40 @@ class NurseController extends Controller
             'ghana_card_number' => 'nullable|string|unique:users,ghana_card_number',
             
             // Photo validation
-            'photo' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:2048', // 2MB max
+            'photo' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:2048',
             
             // Professional fields
             'license_number' => 'nullable|string|unique:users,license_number',
             'specialization' => 'nullable|string|max:255',
             'years_experience' => 'nullable|integer|min:0|max:50',
             
-            // Authentication setup
-            'send_invite' => 'boolean',
+            // Authentication setup - CHANGED: nullable instead of just boolean
+            'send_invite' => 'nullable|in:true,false,1,0,yes,no',
             'password' => 'nullable|string|min:8',
         ]);
 
-        $validator->sometimes('password', 'required', function ($input) {
-            return !$input->send_invite;
-        });
-
         if ($validator->fails()) {
+            \Log::error("Validation failed", $validator->errors()->toArray());
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Get boolean value - this handles string "true"/"false" conversion
+        $sendInvite = $request->boolean('send_invite', false);
+        
+        \Log::info("Processed send_invite as boolean: " . ($sendInvite ? 'true' : 'false'));
+        
+        // Validate password requirement
+        if (!$sendInvite && empty($request->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => [
+                    'password' => ['Password is required when not sending an invitation.']
+                ]
             ], 422);
         }
 
@@ -188,13 +205,17 @@ class NurseController extends Controller
             $nurseData['role'] = 'nurse';
 
             // Set password or generate temporary one for invitation
-            if ($request->send_invite) {
+            if ($sendInvite) {
                 $temporaryPassword = Str::random(12);
                 $nurseData['password'] = Hash::make($temporaryPassword);
                 $nurseData['force_password_change'] = true;
+                
+                \Log::info("Generated temporary password for invitation");
             } else {
                 $nurseData['password'] = Hash::make($request->password);
                 $nurseData['force_password_change'] = false;
+                
+                \Log::info("Using provided password");
             }
 
             // Set registered IP and verification
@@ -207,13 +228,17 @@ class NurseController extends Controller
 
             // Create nurse
             $nurse = User::create($nurseData);
+            
+            \Log::info("Nurse created successfully with ID: " . $nurse->id);
 
             // Send invitation email if requested
-            if ($request->send_invite) {
+            if ($sendInvite) {
                 try {
                     $nurse->notify(new UserInvitationNotification($temporaryPassword));
+                    \Log::info("Invitation email sent to: " . $nurse->email);
                 } catch (\Exception $e) {
                     \Log::error('Failed to send invitation email: ' . $e->getMessage());
+                    // Don't fail the whole operation if email fails
                 }
             }
 
@@ -221,7 +246,7 @@ class NurseController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $request->send_invite 
+                'message' => $sendInvite 
                     ? 'Nurse created successfully and invitation email sent'
                     : 'Nurse created successfully',
                 'data' => new UserResource($nurse->fresh(['roleModel', 'verifier']))
@@ -229,6 +254,9 @@ class NurseController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
+            
+            \Log::error('Failed to create nurse: ' . $e->getMessage());
+            \Log::error($e->getTraceAsString());
             
             return response()->json([
                 'success' => false,
